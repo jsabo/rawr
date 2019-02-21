@@ -1,0 +1,735 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploys a TSEE cluster into a new VPC
+
+Parameters:
+  EnvironmentType:
+    Type: String
+
+Mappings:
+  EnvironmentTypeToConfig:
+    saboK8s:
+      VpcCidrBlock: "10.0.0.0/16"
+      InstanceType: t3.medium
+      ImageId: ami-0b4eb1d8782fc3aea
+      KeyName: sabo
+      VolumeSize: 30
+      CreatePrivateNetworks: false
+      CreateDNSRecords: false
+
+Conditions:
+  CreateDNSRecords:
+    Fn::Equals:
+      - !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - CreateDNSRecords
+      - True
+  CreatePrivateNetworks:
+    Fn::Equals:
+      - !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - CreatePrivateNetworks
+      - True
+
+Resources:
+
+  #
+  # Public VPC
+  #
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - VpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentType}-vpc"
+  IPv6CidrBlock:
+    Type: 'AWS::EC2::VPCCidrBlock'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AmazonProvidedIpv6CidrBlock: true
+
+  #
+  # Internet gateways (ipv4, and egress for ipv6)
+  #
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentType}-igw'
+  IGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: IGW
+      VpcId:
+        Ref: VPC
+  EgressOnlyIGW:
+    Type: AWS::EC2::EgressOnlyInternetGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId: !Ref VPC
+
+  #
+  # Public route table
+  #
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentType}-public-rt'
+  PublicDefaultIpv4Route:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicRt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: IGW
+  PublicDevaultIpv6Route:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PublicRt
+      GatewayId:
+        Ref: IGW
+
+  #
+  # Public subnets
+  #
+  PublicSubnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '01::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-public-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet0RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet0
+      RouteTableId:
+        Ref: PublicRt
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '02::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-public-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRt
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '03::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 2
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-public-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRt
+
+  #
+  # Private route tables
+  #
+  PrivateRt0:
+    Type: AWS::EC2::RouteTable
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-private-rt-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+  NAT0:
+    Type: AWS::EC2::NatGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP0
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet0
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-nat-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+  EIP0:
+    Type: AWS::EC2::EIP
+    Condition: CreatePrivateNetworks
+    Properties:
+      Domain: vpc
+  NatRoute0:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      RouteTableId:
+        Ref: PrivateRt0
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT0
+  PrivateRt0DefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PrivateRt0
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyIGW
+
+  PrivateRt1:
+    Type: AWS::EC2::RouteTable
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-private-rt-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+  NAT1:
+    Type: AWS::EC2::NatGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP1
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-nat-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+  EIP1:
+    Type: AWS::EC2::EIP
+    Condition: CreatePrivateNetworks
+    Properties:
+      Domain: vpc
+  NatRoute1:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      RouteTableId:
+        Ref: PrivateRt1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT1
+  PrivateRt1DefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PrivateRt1
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyIGW
+
+  PrivateRt2:
+    Type: AWS::EC2::RouteTable
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-private-rt-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+  NAT2:
+    Type: AWS::EC2::NatGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP2
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-nat-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+  EIP2:
+    Type: AWS::EC2::EIP
+    Condition: CreatePrivateNetworks
+    Properties:
+      Domain: vpc
+  NatRoute2:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      RouteTableId:
+        Ref: PrivateRt2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT2
+  PrivateRt2DefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PrivateRt2
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyIGW
+
+  #
+  # Private subnets
+  #
+  PrivateSubnet0:
+    Type: AWS::EC2::Subnet
+    Condition: CreatePrivateNetworks
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 30, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: 'a1::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-private-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubne01RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreatePrivateNetworks
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet0
+      RouteTableId:
+        Ref: PrivateRt0
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: CreatePrivateNetworks
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 31, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: 'a2::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-private-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubnet1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreatePrivateNetworks
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRt1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreatePrivateNetworks
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 32, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: 'a3::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 2
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${EnvironmentType}-private-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubnet2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreatePrivateNetworks
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2
+      RouteTableId:
+        Ref: PrivateRt2
+
+  #
+  # Security groups
+  #
+  K8sNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all nodes in the K8s cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${EnvironmentType}-k8sNode-sg"
+
+  #
+  # IAM Roles
+  #
+  EKSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      RoleName: !Sub "${EnvironmentType}-EKSServiceRole"
+
+  K8sNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - !Ref K8sNodeInstanceRole
+
+  K8sNodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        -
+          PolicyName: !Sub "${EnvironmentType}-K8sExternalDNS"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            - Effect: "Allow"
+              Action: "route53:ChangeResourceRecordSets"
+              Resource: "arn:aws:route53:::hostedzone/*"
+            - Effect: "Allow"
+              Action:
+                - "acm:DescribeCertificate"
+                - "acm:ListCertificates"
+                - "acm:GetCertificate"
+                - "ec2:AuthorizeSecurityGroupIngress"
+                - "ec2:CreateSecurityGroup"
+                - "ec2:CreateTags"
+                - "ec2:DeleteTags"
+                - "ec2:DeleteSecurityGroup"
+                - "ec2:DescribeAccountAttributes"
+                - "ec2:DescribeAddresses"
+                - "ec2:DescribeInstances"
+                - "ec2:DescribeInstanceStatus"
+                - "ec2:DescribeInternetGateways"
+                - "ec2:DescribeSecurityGroups"
+                - "ec2:DescribeSubnets"
+                - "ec2:DescribeTags"
+                - "ec2:DescribeVpcs"
+                - "ec2:ModifyInstanceAttribute"
+                - "ec2:ModifyNetworkInterfaceAttribute"
+                - "ec2:RevokeSecurityGroupIngress"
+                - "elasticloadbalancing:AddTags"
+                - "elasticloadbalancing:CreateListener"
+                - "elasticloadbalancing:CreateLoadBalancer"
+                - "elasticloadbalancing:CreateRule"
+                - "elasticloadbalancing:CreateTargetGroup"
+                - "elasticloadbalancing:DeleteListener"
+                - "elasticloadbalancing:DeleteLoadBalancer"
+                - "elasticloadbalancing:DeleteRule"
+                - "elasticloadbalancing:DeleteTargetGroup"
+                - "elasticloadbalancing:DeregisterTargets"
+                - "elasticloadbalancing:DescribeListeners"
+                - "elasticloadbalancing:DescribeLoadBalancers"
+                - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+                - "elasticloadbalancing:DescribeRules"
+                - "elasticloadbalancing:DescribeSSLPolicies"
+                - "elasticloadbalancing:DescribeTags"
+                - "elasticloadbalancing:DescribeTargetGroups"
+                - "elasticloadbalancing:DescribeTargetGroupAttributes"
+                - "elasticloadbalancing:DescribeTargetHealth"
+                - "elasticloadbalancing:ModifyListener"
+                - "elasticloadbalancing:ModifyLoadBalancerAttributes"
+                - "elasticloadbalancing:ModifyRule"
+                - "elasticloadbalancing:ModifyTargetGroup"
+                - "elasticloadbalancing:ModifyTargetGroupAttributes"
+                - "elasticloadbalancing:RegisterTargets"
+                - "elasticloadbalancing:RemoveTags"
+                - "elasticloadbalancing:SetIpAddressType"
+                - "elasticloadbalancing:SetSecurityGroups"
+                - "elasticloadbalancing:SetSubnets"
+                - "elasticloadbalancing:SetWebACL"
+                - "iam:CreateServiceLinkedRole"
+                - "iam:GetServerCertificate"
+                - "iam:ListServerCertificates"
+                - "route53:ListHostedZones"
+                - "route53:ListResourceRecordSets"
+                - "waf:GetWebACL"
+                - "waf-regional:GetWebACLForResource"
+                - "waf-regional:GetWebACLForResource"
+                - "waf-regional:GetWebACL"
+                - "waf-regional:AssociateWebACL"
+                - "waf-regional:DisassociateWebACL"
+                - "tag:GetResources"
+                - "tag:TagResources"
+              Resource: "*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      RoleName: !Sub "${EnvironmentType}-K8sNodeInstanceRole"
+
+  NodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
+      DesiredCapacity: 3
+      LaunchConfigurationName: !Ref NodeLaunchConfig
+      MinSize: 3
+      MaxSize: 3
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet0
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-node"
+        PropagateAtLaunch: 'true'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+
+  NodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      IamInstanceProfile: !Ref K8sNodeInstanceProfile
+      ImageId: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - ImageId
+      InstanceType: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - InstanceType
+      KeyName: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - KeyName
+      SecurityGroups:
+        - !Ref K8sNodeSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !FindInMap
+              - EnvironmentTypeToConfig
+              - !Ref EnvironmentType
+              - VolumeSize
+            VolumeType: gp2
+            DeleteOnTermination: true
+
+Outputs:
+
+  VPC:
+    Description: "Virtual private network"
+    Value: !Ref VPC
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", VPC ] ]
+
+  PublicSubnet0:
+    Description: "First public subnet"
+    Value: !Ref PublicSubnet0
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", PublicSubnet0 ] ]
+
+  PublicSubnet1:
+    Description: "Second public subnet"
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", PublicSubnet1 ] ]
+
+  PublicSubnet2:
+    Description: "Third public subnet"
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", PublicSubnet2 ] ]
+
+  PrivateSubnet0:
+    Condition: CreatePrivateNetworks
+    Description: "First private subnet"
+    Value: !Ref PrivateSubnet0
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", PrivateSubnet0 ] ]
+
+  PrivateSubnet1:
+    Condition: CreatePrivateNetworks
+    Description: "Second private subnet"
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", PrivateSubnet1 ] ]
+
+  PrivateSubnet2:
+    Condition: CreatePrivateNetworks
+    Description: "Third private subnet"
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", PrivateSubnet2 ] ]
+
+  EKSServiceRoleArn:
+    Description: "Allows EKS to manage clusters on your behalf."
+    Value: !GetAtt EKSServiceRole.Arn
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", EKSServiceRoleArn ] ]
+
+  K8sNodeInstanceProfileArn:
+    Description: "K8s Node Instance Profile"
+    Value: !GetAtt K8sNodeInstanceProfile.Arn
+    Export:
+      Name: !Join [ ":", [ !Sub "${EnvironmentType}", K8sNodeInstanceProfileArn ] ]
