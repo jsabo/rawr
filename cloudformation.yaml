@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Deploys a TSEE cluster into a new VPC
+Description: Deploys a K8s cluster into a new VPC
 
 Parameters:
   EnvironmentType:
