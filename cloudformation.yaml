@@ -499,11 +499,103 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for all nodes in the K8s cluster
+      SecurityGroupIngress:
+        - CidrIp: "0.0.0.0/0"
+          FromPort: 22
+          ToPort: 22
+          IpProtocol: tcp
+        - CidrIp: "0.0.0.0/0"
+          FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+        - CidrIp: "0.0.0.0/0"
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+        - CidrIp: "0.0.0.0/0" # NodePort Services
+          FromPort: 30000
+          ToPort: 32767
+          IpProtocol: tcp
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          FromPort: "-1"
+          ToPort: "-1"
+          IpProtocol: "-1"
       VpcId:
         !Ref VPC
       Tags:
         - Key: "Name"
           Value: !Sub "${EnvironmentType}-k8sNode-sg"
+
+  K8sMasterNodeSecurityGroupK8sAPIServerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6443
+      ToPort: 6443
+
+  K8sMasterNodeSecurityGroupEtcdServerClientAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2379
+      ToPort: 2380
+
+  K8sMasterNodeSecurityGroupKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  K8sMasterNodeSecurityGroupKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  K8sMasterNodeSecurityGroupKubeSchedulerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10251
+      ToPort: 10251
+
+  K8sMasterNodeSecurityGroupKubeControllerManagerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10252
+      ToPort: 10252
+
+  K8sWorkerNodeSecurityGroupKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: K8sNodeSecurityGroup
+    Properties:
+      GroupId: !Ref K8sNodeSecurityGroup
+      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
 
   #
   # IAM Roles
