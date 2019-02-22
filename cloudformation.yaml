@@ -16,6 +16,15 @@ Mappings:
       VolumeSize: 30
       CreatePrivateNetworks: false
       CreateDNSRecords: false
+    CentOSK8s:
+      VpcCidrBlock: "10.1.0.0/16"
+      InstanceType: t3.medium
+      ImageId: ami-02eac2c0129f6376b  # CentOS 7 hvm:ebs-ssd 1901_01
+      KeyName: sabo
+      VolumeSize: 30
+      CreatePrivateNetworks: false
+      CreateDNSRecords: false
+
 
 Conditions:
   CreateDNSRecords:
