@@ -13,14 +13,14 @@ deploy: ## Deploy the demo environment stack.
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
 		--template-file cloudformation.yaml \
-		--stack-name $(ENV) \
+		--stack-name $(NAME) \
 		--parameter-overrides=EnvironmentType=$(ENV)
 
 .PHONY: teardown
 teardown: ## Teardown the demo environment stack.
-	aws cloudformation delete-stack --stack-name $(ENV)
+	aws cloudformation delete-stack --stack-name $(NAME)
 	# Wait for the stack to be torn down.
-	aws cloudformation wait stack-delete-complete --stack-name $(ENV)
+	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
 
 ##@ Help
 .PHONY: help
