@@ -97,7 +97,7 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId:
         Ref: IGW
-  PublicDevaultIpv6Route:
+  PublicDefaultIpv6Route:
     Type: AWS::EC2::Route
     Properties:
       DestinationIpv6CidrBlock: ::/0
