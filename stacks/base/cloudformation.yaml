@@ -1,46 +1,24 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Deploys a K8s cluster into a new VPC
+Description: Deploys a base networking environment to launch resources
 
 Parameters:
-  EnvironmentType:
+
+  VpcCidrBlock:
     Type: String
+    Description: VPC CIDR Block (eg 10.0.0.0/16)
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 10.0.0.0/16
 
-Mappings:
-  EnvironmentTypeToConfig:
-    UbuntuK8s:
-      VpcCidrBlock: "10.0.0.0/16"
-      InstanceType: t3.medium
-      ImageId: ami-0a313d6098716f372 # Ubuntu bionic 18.01 LTS hvm:ebs-ssd 20190212.1
-      KeyName: sabo
-      VolumeSize: 30
-      CreatePrivateNetworks: false
-      CreateDNSRecords: false
-    CentOSK8s:
-      VpcCidrBlock: "10.1.0.0/16"
-      InstanceType: t3.medium
-      ImageId: ami-02eac2c0129f6376b  # CentOS 7 hvm:ebs-ssd 1901_01
-      KeyName: sabo
-      VolumeSize: 30
-      CreatePrivateNetworks: false
-      CreateDNSRecords: false
-
+  CreatePrivateNetworks:
+    Type: String
+    Description: Create private networking resources
+    AllowedValues: [true, false]
+    Default: false
 
 Conditions:
-  CreateDNSRecords:
-    Fn::Equals:
-      - !FindInMap
-        - EnvironmentTypeToConfig
-        - !Ref EnvironmentType
-        - CreateDNSRecords
-      - True
   CreatePrivateNetworks:
-    Fn::Equals:
-      - !FindInMap
-        - EnvironmentTypeToConfig
-        - !Ref EnvironmentType
-        - CreatePrivateNetworks
-      - True
+    !Equals [true, !Ref CreatePrivateNetworks]
 
 Resources:
 
@@ -50,10 +28,7 @@ Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: !FindInMap
-        - EnvironmentTypeToConfig
-        - !Ref EnvironmentType
-        - VpcCidrBlock
+      CidrBlock: !Ref VpcCidrBlock
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
@@ -504,107 +479,289 @@ Resources:
   #
   # Security groups
   #
-  K8sNodeSecurityGroup:
+  MasterNodeSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for all nodes in the K8s cluster
-      SecurityGroupIngress:
-        - CidrIp: "0.0.0.0/0"
-          FromPort: 22
-          ToPort: 22
-          IpProtocol: tcp
-        - CidrIp: "0.0.0.0/0"
-          FromPort: 80
-          ToPort: 80
-          IpProtocol: tcp
-        - CidrIp: "0.0.0.0/0"
-          FromPort: 443
-          ToPort: 443
-          IpProtocol: tcp
-        - CidrIp: "0.0.0.0/0" # NodePort Services
-          FromPort: 30000
-          ToPort: 32767
-          IpProtocol: tcp
-      SecurityGroupEgress:
-        - CidrIp: "0.0.0.0/0"
-          FromPort: "-1"
-          ToPort: "-1"
-          IpProtocol: "-1"
+      GroupDescription: Security group for all master nodes in the cluster
       VpcId:
         !Ref VPC
       Tags:
         - Key: "Name"
-          Value: !Sub "${AWS::StackName}-k8sNode-sg"
+          Value: !Sub "${AWS::StackName}-k8s-master-sg"
 
-  K8sMasterNodeSecurityGroupK8sAPIServerIngress:
+  K8sAPIServerIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
+    DependsOn: MasterNodeSecurityGroup
     Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      Description: "kubernetes API server"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 6443
       ToPort: 6443
 
-  K8sMasterNodeSecurityGroupEtcdServerClientAPIIngress:
+  WorkerK8sAPIServerIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
+    DependsOn: MasterNodeSecurityGroup
     Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      Description: "worker access to kubernetes API server"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref WorkerNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6443
+      ToPort: 6443
+
+  EtcdServerClientAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "etcd server client API"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 2379
       ToPort: 2380
 
-  K8sMasterNodeSecurityGroupKubletAPIIngress:
+  MasterKubletAPIIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
+    DependsOn: MasterNodeSecurityGroup
     Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      Description: "master kubelet API"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 10250
       ToPort: 10250
 
-  K8sMasterNodeSecurityGroupKubletAPIIngress:
+  KubeSchedulerIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
+    DependsOn: MasterNodeSecurityGroup
     Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
-      IpProtocol: tcp
-      FromPort: 10250
-      ToPort: 10250
-
-  K8sMasterNodeSecurityGroupKubeSchedulerIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
-    Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      Description: "kube-cheduler"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 10251
       ToPort: 10251
 
-  K8sMasterNodeSecurityGroupKubeControllerManagerIngress:
+  KubeControllerManagerIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
+    DependsOn: MasterNodeSecurityGroup
     Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      Description: "kube-controller-manager"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 10252
       ToPort: 10252
 
-  K8sWorkerNodeSecurityGroupKubletAPIIngress:
+  NetworkLoadBalancerIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    DependsOn: K8sNodeSecurityGroup
+    DependsOn: MasterNodeSecurityGroup
     Properties:
-      GroupId: !Ref K8sNodeSecurityGroup
-      SourceSecurityGroupId: !Ref K8sNodeSecurityGroup
+      Description: "network loadbalancer"
+      GroupId: !Ref MasterNodeSecurityGroup
+      CidrIp: "199.116.73.11/32"
+      IpProtocol: tcp
+      FromPort: 6443
+      ToPort: 6443
+
+  MasterSecureShellManagmentIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "master secure shell management"
+      GroupId: !Ref MasterNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
+  WorkerNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all worker nodes in the cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-k8s-worker-sg"
+
+  WorkerKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker kubelet API"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      SourceSecurityGroupId: !Ref WorkerNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 10250
       ToPort: 10250
+
+  WorkerControlPlaneKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker control plane kubelet API"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  WorkerNodePortServicesIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker nodeport services"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 30000
+      ToPort: 32767
+
+  WorkerSecureShellManagmentIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker secure shell management"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
+  CloudProviderAWSSecurityGroup:
+    # https://github.com/kubernetes/cloud-provider-aws
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for cloud provider AWS plugin
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-cloud-provider-aws-sg"
+        - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+          Value: ""
+
+  TigeraSecureNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all tsee nodes in the cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-tsee-node-sg"
+
+  TigeraSecureBGPNetworkingIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: TigeraSecureNodeSecurityGroup
+    Properties:
+      Description: "tigera secure ee networking (BGP)"
+      GroupId: !Ref TigeraSecureNodeSecurityGroup
+      SourceSecurityGroupId: !Ref TigeraSecureNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 179
+      ToPort: 179
+
+  TigeraSecureIPinIPNetworkingIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: TigeraSecureNodeSecurityGroup
+    Properties:
+      Description: "tigera secure ee IP-in-IP mode"
+      GroupId: !Ref TigeraSecureNodeSecurityGroup
+      SourceSecurityGroupId: !Ref TigeraSecureNodeSecurityGroup
+      IpProtocol: "4"
+      FromPort: "-1"
+      ToPort: "-1"
+
+  EKSClusterControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Managed Kubernetes on AWS Control Plane Security Group
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-eks-master-sg"
+
+  EKSNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all nodes in the EKS cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-eks-worker-sg"
+        - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+          Value: 'owned'
+
+  EKSNodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: '-1'
+      FromPort: 0
+      ToPort: 65535
+
+  EKSNodeSecurityGroupFromControlPlaneIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  EKSControlPlaneEgressToNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  EKSNodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  EKSControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  EKSClusterControlPlaneSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      SourceSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+      FromPort: 443
 
   #
   # IAM Roles
@@ -681,8 +838,10 @@ Resources:
                 - "elasticloadbalancing:CreateLoadBalancer"
                 - "elasticloadbalancing:CreateRule"
                 - "elasticloadbalancing:CreateTargetGroup"
+                - "elasticloadbalancing:ConfigureHealthCheck"
                 - "elasticloadbalancing:DeleteListener"
                 - "elasticloadbalancing:DeleteLoadBalancer"
+                - "elasticloadbalancing:DeleteLoadBalancerListeners"
                 - "elasticloadbalancing:DeleteRule"
                 - "elasticloadbalancing:DeleteTargetGroup"
                 - "elasticloadbalancing:DeregisterTargets"
@@ -725,56 +884,6 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
       RoleName: !Sub "${AWS::StackName}-K8sNodeInstanceRole"
-
-  NodeGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
-      DesiredCapacity: 3
-      LaunchConfigurationName: !Ref NodeLaunchConfig
-      MinSize: 3
-      MaxSize: 3
-      VPCZoneIdentifier:
-        - !Ref PublicSubnet0
-        - !Ref PublicSubnet1
-        - !Ref PublicSubnet2
-      Tags:
-      - Key: Name
-        Value: !Sub "${AWS::StackName}-node"
-        PropagateAtLaunch: 'true'
-    UpdatePolicy:
-      AutoScalingRollingUpdate:
-        MinInstancesInService: '1'
-        MaxBatchSize: '1'
-
-  NodeLaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    Properties:
-      AssociatePublicIpAddress: 'true'
-      IamInstanceProfile: !Ref K8sNodeInstanceProfile
-      ImageId: !FindInMap
-        - EnvironmentTypeToConfig
-        - !Ref EnvironmentType
-        - ImageId
-      InstanceType: !FindInMap
-        - EnvironmentTypeToConfig
-        - !Ref EnvironmentType
-        - InstanceType
-      KeyName: !FindInMap
-        - EnvironmentTypeToConfig
-        - !Ref EnvironmentType
-        - KeyName
-      SecurityGroups:
-        - !Ref K8sNodeSecurityGroup
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize: !FindInMap
-              - EnvironmentTypeToConfig
-              - !Ref EnvironmentType
-              - VolumeSize
-            VolumeType: gp2
-            DeleteOnTermination: true
 
 Outputs:
 
@@ -834,3 +943,51 @@ Outputs:
     Value: !GetAtt K8sNodeInstanceProfile.Arn
     Export:
       Name: !Join [ ":", [ !Sub "${AWS::StackName}", K8sNodeInstanceProfileArn ] ]
+
+  EKSClusterControlPlaneSecurityGroup:
+    Description: "Managed Kubernetes on AWS Control Plane Security Group"
+    Value: !Ref EKSClusterControlPlaneSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSClusterControlPlaneSecurityGroup ] ]
+
+  EKSNodeSecurityGroup:
+    Description: "Security group for all nodes in the EKS cluster"
+    Value: !Ref EKSNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]
+
+  EKSNodeSecurityGroup:
+    Description: "Security group for all nodes in the EKS cluster"
+    Value: !Ref EKSNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]
+
+  EKSNodeSecurityGroup:
+    Description: "Security group for all nodes in the EKS cluster"
+    Value: !Ref EKSNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]
+
+  MasterNodeSecurityGroup:
+    Description: "Security group for all master nodes in the cluster"
+    Value: !Ref MasterNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", MasterNodeSecurityGroup ] ]
+
+  WorkerNodeSecurityGroup:
+    Description: "Security group for all worker nodes in the cluster"
+    Value: !Ref WorkerNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", WorkerNodeSecurityGroup ] ]
+
+  CloudProviderAWSSecurityGroup:
+    Description: "Security group for cloud provider AWS plugin"
+    Value: !Ref CloudProviderAWSSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", CloudProviderAWSSecurityGroup ] ]
+
+  TigeraSecureNodeSecurityGroup:
+    Description: "Security group for all tsee nodes in the cluster"
+    Value: !Ref TigeraSecureNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", TigeraSecureNodeSecurityGroup ] ]

@@ -1,0 +1,186 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploys a K8s cluster into a base networking environment
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Description: An environment name that will be prefixed to resource names and outputs
+
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+
+  ImageId:
+    Description: AMI id for the node instances.
+    Type: AWS::EC2::Image::Id
+
+  InstanceType:
+    Description: EC2 instance type for the node instances
+    Type: String
+    Default: t3.large
+
+  HostedZoneId:
+    Description: A description
+    Type: AWS::Route53::HostedZone::Id
+
+  MasterNodeNetworkLoadBalancerAliasName:
+    Description: A description
+    Type: String
+
+Resources:
+
+  #
+  # K8s Cluster
+  #
+  MasterNodeNetworkLoadBalancerDNSName:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      RecordSets:
+        - Name: !Ref MasterNodeNetworkLoadBalancerAliasName
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt MasterNodesNetworkLoadBalancer.CanonicalHostedZoneID
+            DNSName: !GetAtt MasterNodesNetworkLoadBalancer.DNSName
+
+  MasterNodesNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${AWS::StackName}-masterNodes-lb"
+      Scheme: "internet-facing"
+      Subnets:
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet0"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet1"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet2"
+      LoadBalancerAttributes:
+        - Key: "load_balancing.cross_zone.enabled"
+          Value: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-masterNodes-lb"
+      Type: "network"
+
+  MasterNodesNetworkLoadBalancerHTTPSListener:
+    Type : AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        -
+          Type: forward
+          TargetGroupArn: !Ref MasterNodesTargetGroup
+      LoadBalancerArn: !Ref MasterNodesNetworkLoadBalancer
+      Port: 6443
+      Protocol: TCP
+
+  MasterNodesTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-masterNodes-tg"
+      Port: 6443
+      Protocol: TCP
+      HealthCheckPort: 6443
+      HealthCheckProtocol: TCP
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: !Sub "${EnvironmentName}:VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-masterNodes-tg"
+
+  MasterNodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
+      DesiredCapacity: 3
+      LaunchConfigurationName: !Ref MasterNodeLaunchConfig
+      MinSize: 3
+      MaxSize: 3
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet0"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet1"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet2"
+      TargetGroupARNs:
+        - !Ref MasterNodesTargetGroup
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-master-node"
+        PropagateAtLaunch: 'true'
+      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+        Value: ""
+        PropagateAtLaunch: 'true'
+      - Key: "kubespray-role"
+        Value: "kube-master, etcd"
+        PropagateAtLaunch: 'true'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+
+  MasterNodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      IamInstanceProfile:
+        Fn::ImportValue: !Sub "${EnvironmentName}:K8sNodeInstanceProfileArn"
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - Fn::ImportValue: !Sub "${EnvironmentName}:MasterNodeSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:TigeraSecureNodeSecurityGroup"
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp2
+            DeleteOnTermination: true
+
+  WorkerNodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-worker-asg"
+      DesiredCapacity: 3
+      LaunchConfigurationName: !Ref WorkerNodeLaunchConfig
+      MinSize: 3
+      MaxSize: 3
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet0"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet1"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet2"
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-worker-node"
+        PropagateAtLaunch: 'true'
+      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+        Value: ""
+        PropagateAtLaunch: 'true'
+      - Key: "kubespray-role"
+        Value: "kube-node"
+        PropagateAtLaunch: 'true'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+
+  WorkerNodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      IamInstanceProfile:
+        Fn::ImportValue: !Sub "${EnvironmentName}:K8sNodeInstanceProfileArn"
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - Fn::ImportValue: !Sub "${EnvironmentName}:WorkerNodeSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:TigeraSecureNodeSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:CloudProviderAWSSecurityGroup"
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp2
+            DeleteOnTermination: true

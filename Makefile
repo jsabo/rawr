@@ -2,22 +2,72 @@ include config.mk
 
 .DEFAULT_GOAL:=help
 
-##@ Manage demo environments.
-.PHONY: test
-test: ## Test demo environment stack.
-	aws cloudformation validate-template --template-body file://cloudformation.yaml
+##@ Manage base stacks.
+.PHONY: test_base
+test_base: ## Test base stack.
+	aws cloudformation validate-template --template-body file://stacks/base/cloudformation.yaml
 
-.PHONY: deploy
-deploy: ## Deploy the demo environment stack.
+.PHONY: deploy_base
+deploy_base: ## Deploy the base stack.
 	aws cloudformation deploy \
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
-		--template-file cloudformation.yaml \
-		--stack-name $(NAME) \
-		--parameter-overrides=EnvironmentType=$(ENV)
+		--template-file stacks/base/cloudformation.yaml \
+		--stack-name $(ENVNAME)
 
-.PHONY: teardown
-teardown: ## Teardown the demo environment stack.
+.PHONY: teardown_base
+teardown_base: ## Teardown the base stack.
+	aws cloudformation delete-stack --stack-name $(ENVNAME)
+	# Wait for the stack to be torn down.
+	aws cloudformation wait stack-delete-complete --stack-name $(ENVNAME)
+
+##@ Manage tsee environments.
+.PHONY: test_tsee
+test_tsee: ## Test tsee stack.
+	aws cloudformation validate-template --template-body file://stacks/tsee/cloudformation.yaml
+
+.PHONY: deploy_tsee
+deploy_tsee: ## Deploy the tsee stack.
+	aws cloudformation deploy \
+		--no-fail-on-empty-changeset \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--template-file stacks/tsee/cloudformation.yaml \
+		--stack-name $(NAME) \
+		--parameter-overrides \
+			EnvironmentName=$(ENVNAME) \
+			MasterNodeNetworkLoadBalancerAliasName=$(ELBNAME) \
+			HostedZoneId=$(HOSTEDZONEID) \
+			KeyName=$(KEYNAME) \
+			ImageId=$(IMAGEID) \
+			InstanceType=$(INSTANCETYPE)
+
+.PHONY: teardown_tsee
+teardown_tsee: ## Teardown the tsee stack.
+	aws cloudformation delete-stack --stack-name $(NAME)
+	# Wait for the stack to be torn down.
+	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
+
+##@ Manage eks environments.
+.PHONY: test_eks
+test_eks: ## Test eks stack.
+	aws cloudformation validate-template --template-body file://stacks/eks/cloudformation.yaml
+
+.PHONY: deploy_eks
+deploy_eks: ## Deploy the eks stack.
+	aws cloudformation deploy \
+		--no-fail-on-empty-changeset \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--template-file stacks/eks/cloudformation.yaml \
+		--stack-name $(NAME) \
+		--parameter-overrides \
+			EnvironmentName=$(ENVNAME) \
+			HostedZoneId=$(HOSTEDZONEID) \
+			KeyName=$(KEYNAME) \
+			ImageId=$(EKSIMAGEID) \
+			InstanceType=$(EKSINSTANCETYPE)
+
+.PHONY: teardown_eks
+teardown_eks: ## Teardown the eks stack.
 	aws cloudformation delete-stack --stack-name $(NAME)
 	# Wait for the stack to be torn down.
 	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
