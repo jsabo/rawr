@@ -24,3 +24,17 @@ Manage eks environments.
 Help
   help             Type make followed by target you wish to run.
 ```
+
+## Make a `local-config.mk` to override some values
+
+```
+$ cat local-config.mk
+ENVNAME=sabo-demo
+ELBNAME=k8s.example.com
+HOSTEDZONEID=JDLSLSJSJSJS
+KEYNAME=sabo
+IMAGEID=ami-0565af6e282977273
+INSTANCETYPE=t3.large
+EKSINSTANCETYPE=t3.large
+EKSIMAGEID=ami-0b4eb1d8782fc3aea
+```
