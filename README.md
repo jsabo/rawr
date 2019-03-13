@@ -1,5 +1,29 @@
 # rawr
 
+# Overview
+
+## Opinionated network architecture
+
+## Opinionated kubernetes architecture
+
+## Prerequisites
+
+## Createe a `local-config.mk` to override the required make parameters
+
+```
+$ cat local-config.mk
+ENVNAME=sabo-demo
+ELBNAME=k8s.example.com
+HOSTEDZONEID=JDLSLSJSJSJS
+KEYNAME=sabo
+IMAGEID=ami-0565af6e282977273
+INSTANCETYPE=t3.large
+EKSINSTANCETYPE=t3.large
+EKSIMAGEID=ami-0b4eb1d8782fc3aea
+```
+
+# Usage
+
 ```
 $ make
 
@@ -25,16 +49,38 @@ Help
   help             Type make followed by target you wish to run.
 ```
 
-## Make a `local-config.mk` to override some values
+## Setup base networking environment
 
 ```
-$ cat local-config.mk
-ENVNAME=sabo-demo
-ELBNAME=k8s.example.com
-HOSTEDZONEID=JDLSLSJSJSJS
-KEYNAME=sabo
-IMAGEID=ami-0565af6e282977273
-INSTANCETYPE=t3.large
-EKSINSTANCETYPE=t3.large
-EKSIMAGEID=ami-0b4eb1d8782fc3aea
+make deploy_base NAME=sabo-demo
+```
+
+## Deploying tsee stack
+
+```
+make deploy_tsee NAME=sabo-demo-tsee
+```
+
+## Deploying eks stack
+
+```
+make deploy_eks NAME=eks-sabo-demo
+```
+
+## Verifying things are working
+
+I typically install kubernetes  with kubespray and a slightly modified dynamic inventory script that connects to the public ips over ssh but uses the private hostnames in the inventory.
+
+## Tearing it down
+
+```
+make teardown_tsee NAME=sabo-demo-tsee
+```
+
+```
+make teardown_eks NAME=eks-sabo-demo
+```
+
+```
+make teardown_base NAME=sabo-demo
 ```
