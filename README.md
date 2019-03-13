@@ -8,7 +8,7 @@
 
 ## Prerequisites
 
-## Createe a `local-config.mk` to override the required make parameters
+Create a `local-config.mk` file in the base directory to override the required make parameters
 
 ```
 $ cat local-config.mk
@@ -64,7 +64,7 @@ make deploy_tsee NAME=sabo-demo-tsee
 ## Deploying eks stack
 
 ```
-make deploy_eks NAME=eks-sabo-demo
+make deploy_eks NAME=sabo-demo-eks
 ```
 
 ## Verifying things are working
@@ -78,7 +78,7 @@ make teardown_tsee NAME=sabo-demo-tsee
 ```
 
 ```
-make teardown_eks NAME=eks-sabo-demo
+make teardown_eks NAME=sabo-demo-eks
 ```
 
 ```
