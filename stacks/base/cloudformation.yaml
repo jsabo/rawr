@@ -956,18 +956,6 @@ Outputs:
     Export:
       Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]
 
-  EKSNodeSecurityGroup:
-    Description: "Security group for all nodes in the EKS cluster"
-    Value: !Ref EKSNodeSecurityGroup
-    Export:
-      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]
-
-  EKSNodeSecurityGroup:
-    Description: "Security group for all nodes in the EKS cluster"
-    Value: !Ref EKSNodeSecurityGroup
-    Export:
-      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]
-
   MasterNodeSecurityGroup:
     Description: "Security group for all master nodes in the cluster"
     Value: !Ref MasterNodeSecurityGroup
