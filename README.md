@@ -2,6 +2,8 @@
 
 # Overview
 
+Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansible
+
 ## AWS network architecture
 
 ## Kubernetes cluster architecture
