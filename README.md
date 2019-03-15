@@ -2,11 +2,29 @@
 
 # Overview
 
-## Opinionated network architecture
+## AWS network architecture
 
-## Opinionated kubernetes architecture
+## Kubernetes cluster architecture
 
 ## Prerequisites
+
+Install the awscli
+
+```
+brew install awscl
+```
+
+Configure awscli credentials
+
+```
+aws configure
+```
+
+Check to make sure you can authenticate to the AWS apis and you're in the right account
+
+```
+aws sts get-caller-identity
+```
 
 Create a `local-config.mk` file in the base directory to override the required make parameters
 
@@ -65,6 +83,14 @@ make deploy_tsee NAME=sabo-demo-tsee
 
 ```
 make deploy_eks NAME=sabo-demo-eks
+```
+
+## Installing Kubernetes
+
+### Kubespray
+
+```
+VPC_VISIBILITY=public ansible-playbook -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root cluster.yml
 ```
 
 ## Verifying things are working
