@@ -28,7 +28,7 @@ aws sts get-caller-identity
 
 Create a `local-config.mk` file in the base directory to override the required make parameters
 
-```
+```console
 $ cat local-config.mk
 ENVNAME=sabo-demo
 ELBNAME=k8s.example.com
