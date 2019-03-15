@@ -59,10 +59,10 @@ Manage base stacks.
   deploy_base      Deploy the base stack.
   teardown_base    Teardown the base stack.
 
-Manage tsee environments.
-  test_tsee        Test tsee stack.
-  deploy_tsee      Deploy the tsee stack.
-  teardown_tsee    Teardown the tsee stack.
+Manage k8s environments.
+  test_k8s        Test k8s stack.
+  deploy_k8s      Deploy the k8s stack.
+  teardown_k8s    Teardown the k8s stack.
 
 Manage eks environments.
   test_eks         Test eks stack.
@@ -79,10 +79,10 @@ Help
 make deploy_base NAME=sabo-demo
 ```
 
-## Deploying tsee stack
+## Deploying k8s stack
 
 ```
-make deploy_tsee NAME=sabo-demo-tsee
+make deploy_k8s NAME=sabo-demo-k8s
 ```
 
 ## Deploying eks stack
@@ -98,19 +98,21 @@ make deploy_eks NAME=sabo-demo-eks
 Refer to the [kubespray](https://github.com/kubernetes-sigs/kubespray/blob/master/docs/aws.md) docs for configuration
 
 ```
-VPC_VISIBILITY=public ansible-playbook -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root cluster.yml
+export REGION=us-east-1
+export VPC_VISIBILITY=public
+ansible-playbook -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root cluster.yml
 ```
 
 ## Verifying things are working
 
 ```
-$ VPC_VISIBILITY=public ansible kube-master -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root -m shell -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"
+ansible kube-master -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root -m shell -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"
 ```
 
 ## Tearing it down
 
 ```
-make teardown_tsee NAME=sabo-demo-tsee
+make teardown_k8s NAME=sabo-demo-k8s
 ```
 
 ```
