@@ -42,7 +42,7 @@ EKSIMAGEID=ami-0b4eb1d8782fc3aea
 
 # Usage
 
-```bash
+```console
 $ make
 
 Usage:
