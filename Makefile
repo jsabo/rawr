@@ -21,17 +21,17 @@ teardown_base: ## Teardown the base stack.
 	# Wait for the stack to be torn down.
 	aws cloudformation wait stack-delete-complete --stack-name $(ENVNAME)
 
-##@ Manage tsee environments.
-.PHONY: test_tsee
-test_tsee: ## Test tsee stack.
-	aws cloudformation validate-template --template-body file://stacks/tsee/cloudformation.yaml
+##@ Manage k8s environments.
+.PHONY: test_k8s
+test_k8s: ## Test k8s stack.
+	aws cloudformation validate-template --template-body file://stacks/k8s/cloudformation.yaml
 
-.PHONY: deploy_tsee
-deploy_tsee: ## Deploy the tsee stack.
+.PHONY: deploy_k8s
+deploy_k8s: ## Deploy the k8s stack.
 	aws cloudformation deploy \
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
-		--template-file stacks/tsee/cloudformation.yaml \
+		--template-file stacks/k8s/cloudformation.yaml \
 		--stack-name $(NAME) \
 		--parameter-overrides \
 			EnvironmentName=$(ENVNAME) \
@@ -41,8 +41,8 @@ deploy_tsee: ## Deploy the tsee stack.
 			ImageId=$(IMAGEID) \
 			InstanceType=$(INSTANCETYPE)
 
-.PHONY: teardown_tsee
-teardown_tsee: ## Teardown the tsee stack.
+.PHONY: teardown_k8s
+teardown_k8s: ## Teardown the k8s stack.
 	aws cloudformation delete-stack --stack-name $(NAME)
 	# Wait for the stack to be torn down.
 	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
