@@ -8,6 +8,12 @@
 
 ## Prerequisites
 
+Install ansible
+
+```
+brew install ansible
+```
+
 Install the awscli
 
 ```
@@ -89,13 +95,17 @@ make deploy_eks NAME=sabo-demo-eks
 
 ### Kubespray
 
+Refer to the [kubespray](https://github.com/kubernetes-sigs/kubespray/blob/master/docs/aws.md) docs for configuration
+
 ```
 VPC_VISIBILITY=public ansible-playbook -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root cluster.yml
 ```
 
 ## Verifying things are working
 
-I typically install kubernetes  with kubespray and a slightly modified dynamic inventory script that connects to the public ips over ssh but uses the private hostnames in the inventory.
+```
+$ VPC_VISIBILITY=public ansible kube-master -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root -m shell -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"
+```
 
 ## Tearing it down
 
