@@ -6,6 +6,8 @@ Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansibl
 
 ## AWS network architecture
 
+![network](images/vpc.png)
+
 ## Kubernetes cluster architecture
 
 ## Prerequisites
