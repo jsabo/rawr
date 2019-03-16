@@ -14,25 +14,25 @@ Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansibl
 
 Install ansible
 
-```
+```bash
 brew install ansible
 ```
 
 Install the awscli
 
-```
+```bash
 brew install awscl
 ```
 
 Configure awscli credentials
 
-```
+```bash
 aws configure
 ```
 
 Check to make sure you can authenticate to the AWS apis and you're in the right account
 
-```
+```bash
 aws sts get-caller-identity
 ```
 
@@ -82,19 +82,19 @@ Help
 
 ## Setup base networking environment
 
-```
+```bash
 make deploy_base NAME=sabo-demo
 ```
 
 ## Deploying k8s stack
 
-```
+```bash
 make deploy_k8s NAME=sabo-demo-k8s
 ```
 
 ## Deploying eks stack
 
-```
+```bash
 make deploy_eks NAME=sabo-demo-eks
 ```
 
@@ -104,7 +104,7 @@ make deploy_eks NAME=sabo-demo-eks
 
 Refer to the [kubespray](https://github.com/kubernetes-sigs/kubespray/blob/master/docs/aws.md) docs for configuration
 
-```
+```bash
 export REGION=us-east-1
 export VPC_VISIBILITY=public
 ansible-playbook -i inventory/kubespray-aws-inventory.py \
@@ -116,7 +116,7 @@ ansible-playbook -i inventory/kubespray-aws-inventory.py \
 
 ## Verifying things are working
 
-```
+```bash
 ansible kube-master -i inventory/kubespray-aws-inventory.py \
   --user ubuntu \
   --become \
@@ -126,14 +126,14 @@ ansible kube-master -i inventory/kubespray-aws-inventory.py \
 
 ## Tearing it down
 
-```
+```bash
 make teardown_k8s NAME=sabo-demo-k8s
 ```
 
-```
+```bash
 make teardown_eks NAME=sabo-demo-eks
 ```
 
-```
+```bash
 make teardown_base NAME=sabo-demo
 ```
