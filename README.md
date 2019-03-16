@@ -104,13 +104,21 @@ Refer to the [kubespray](https://github.com/kubernetes-sigs/kubespray/blob/maste
 ```
 export REGION=us-east-1
 export VPC_VISIBILITY=public
-ansible-playbook -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root cluster.yml
+ansible-playbook -i inventory/kubespray-aws-inventory.py \
+  --user ubuntu \
+  --become \
+  --become-user=root \
+  cluster.yml
 ```
 
 ## Verifying things are working
 
 ```
-ansible kube-master -i inventory/kubespray-aws-inventory.py --user ubuntu --become --become-user=root -m shell -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"
+ansible kube-master -i inventory/kubespray-aws-inventory.py \
+  --user ubuntu \
+  --become \
+  --become-user=root \
+  -m shell -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"
 ```
 
 ## Tearing it down
