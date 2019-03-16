@@ -41,13 +41,16 @@ Create a `local-config.mk` file in the base directory to override the required m
 ```console
 $ cat local-config.mk
 ENVNAME=sabo-demo
-ELBNAME=k8s.example.com
-HOSTEDZONEID=JDLSLSJSJSJS
+REGION=us-east-1
+VPCCIDR=10.0.0.0/16
+PRIVATENETWORKING=false
 KEYNAME=sabo
 IMAGEID=ami-0565af6e282977273
 INSTANCETYPE=t3.large
-EKSINSTANCETYPE=t3.large
 EKSIMAGEID=ami-0b4eb1d8782fc3aea
+EKSINSTANCETYPE=t3.large
+ELBNAME=k8s.yao.financial
+HOSTEDZONEID=Z1FI1N5HPAAV7G
 ```
 
 # Usage

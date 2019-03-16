@@ -13,7 +13,10 @@ deploy_base: ## Deploy the base stack.
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
 		--template-file stacks/base/cloudformation.yaml \
-		--stack-name $(ENVNAME)
+		--stack-name $(ENVNAME) \
+		--parameter-overrides \
+			VpcCidrBlock=$(VPCCIDR) \
+			CreatePrivateNetworks=$(PRIVATENETWORKING)
 
 .PHONY: teardown_base
 teardown_base: ## Teardown the base stack.
@@ -35,11 +38,11 @@ deploy_k8s: ## Deploy the k8s stack.
 		--stack-name $(NAME) \
 		--parameter-overrides \
 			EnvironmentName=$(ENVNAME) \
-			MasterNodeNetworkLoadBalancerAliasName=$(ELBNAME) \
-			HostedZoneId=$(HOSTEDZONEID) \
 			KeyName=$(KEYNAME) \
 			ImageId=$(IMAGEID) \
-			InstanceType=$(INSTANCETYPE)
+			InstanceType=$(INSTANCETYPE) \
+			HostedZoneId=$(HOSTEDZONEID) \
+			MasterNodeNetworkLoadBalancerAliasName=$(ELBNAME)
 
 .PHONY: teardown_k8s
 teardown_k8s: ## Teardown the k8s stack.
@@ -61,10 +64,10 @@ deploy_eks: ## Deploy the eks stack.
 		--stack-name $(NAME) \
 		--parameter-overrides \
 			EnvironmentName=$(ENVNAME) \
-			HostedZoneId=$(HOSTEDZONEID) \
 			KeyName=$(KEYNAME) \
 			ImageId=$(EKSIMAGEID) \
 			InstanceType=$(EKSINSTANCETYPE)
+			BootstrapArguments=$(BOOTSTRAPARGS)
 
 .PHONY: teardown_eks
 teardown_eks: ## Teardown the eks stack.
