@@ -2,7 +2,7 @@
 
 # Overview
 
-Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansible
+Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansible.
 
 ## AWS network architecture
 
@@ -12,34 +12,33 @@ Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansibl
 
 ## Prerequisites
 
-Install ansible
+Install ansible.
 
 ```bash
 brew install ansible
 ```
 
-Install the awscli
+Install the awscli.
 
 ```bash
-brew install awscl
+brew install awscli
 ```
 
-Configure awscli credentials
+Configure awscli credentials.
 
 ```bash
 aws configure
 ```
 
-Check to make sure you can authenticate to the AWS apis and you're in the right account
+Check to make sure you can authenticate to the AWS apis and you're in the right account.
 
 ```bash
 aws sts get-caller-identity
 ```
 
-Create a `local-config.mk` file in the base directory to override the required make parameters
+Create a `local-config.mk` file in the base directory to override the required make parameters.
 
-```console
-$ cat local-config.mk
+```bash
 ENVNAME=sabo-demo
 REGION=us-east-1
 VPCCIDR=10.0.0.0/16
@@ -55,7 +54,7 @@ HOSTEDZONEID=A1FI3N5HP7AV7F
 
 # Usage
 
-```console
+```bash
 $ make
 
 Usage:
@@ -82,23 +81,27 @@ Help
 
 ## Setup base networking environment
 
+Launch the supporting AWS network (VPC) and security resources (IAM, SGs).
+
 ```bash
 make deploy_base NAME=sabo-demo
 ```
 
 ## Deploying k8s stack
 
+Launch the compute infrastructure for Kubernetes master and worker nodes.
+
 ```bash
 make deploy_k8s NAME=sabo-demo-k8s
 ```
 
-## Deploying eks stack
-
-```bash
-make deploy_eks NAME=sabo-demo-eks
-```
-
 ## Installing Kubernetes
+
+Let's install the Kubernetes software on the compute infrastructure we just launched.
+
+### KubeAdm
+
+#### Verifying things are working
 
 ### Kubespray
 
@@ -114,7 +117,7 @@ ansible-playbook -i inventory/kubespray-aws-inventory.py \
   cluster.yml
 ```
 
-## Verifying things are working
+#### Verifying things are working
 
 ```bash
 ansible kube-master -i inventory/kubespray-aws-inventory.py \
@@ -124,7 +127,20 @@ ansible kube-master -i inventory/kubespray-aws-inventory.py \
   -m shell -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes"
 ```
 
+## Deploying EKS stack
+
+Launch an AWS managed Kubernetes controlplane and fully configured worker nodes.
+
+```bash
+make deploy_eks NAME=sabo-demo-eks
+```
+
+### Verifying things are working
+
+
 ## Tearing it down
+
+If we want to start over with fresh compute resources we can quickly teardown the Kubernetes stacks while leaving the base networking environment alone.  When we're done and want to clean everything up we can tear it all down, including the base networking environment.
 
 ```bash
 make teardown_k8s NAME=sabo-demo-k8s
