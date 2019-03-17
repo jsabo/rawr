@@ -94,7 +94,7 @@ Help
 
 Launch the supporting AWS network (VPC) and security resources (IAM, SGs).
 
-[![Launch Stack](images/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https://github.com/jsabo/rawr/blob/master/stacks/base/cloudformation.yaml)
+[![Launch Stack](images/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https://s3.amazonaws.com/tigera-solutions/rawr/stacks/base/cloudformation.yaml)
 
 
 ```bash
