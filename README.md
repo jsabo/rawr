@@ -94,6 +94,9 @@ Help
 
 Launch the supporting AWS network (VPC) and security resources (IAM, SGs).
 
+[![Launch Stack](images/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https://github.com/jsabo/rawr/blob/master/stacks/base/cloudformation.yaml)
+
+
 ```bash
 make deploy_base NAME=sabo-demo
 ```
