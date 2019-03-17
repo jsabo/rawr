@@ -6,6 +6,8 @@ Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansibl
 
 ## AWS network architecture
 
+The base networking environment consists of a VPC with IPv4 and IPv6 addressing for subnets across three availability zones. Private subnets with NAT gateways per each availability zone can optionally be created.  Security groups and IAM roles used by Kubernetes and EKS are also deployed as part of the base networking environment.
+
 ![network](images/vpc.png)
 
 ## Kubernetes cluster architecture
