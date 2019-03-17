@@ -6,11 +6,19 @@ Quickly spin up HA Kubernetes and EKS stacks using AWS Cloudformation and Ansibl
 
 ## AWS network architecture
 
-The base networking environment consists of a VPC with IPv4 and IPv6 addressing for subnets across three availability zones. Private subnets with NAT gateways per each availability zone can optionally be created.  Security groups and IAM roles used by Kubernetes and EKS are also deployed as part of the base networking environment.
+The base networking environment consists of a VPC with IPv4 and IPv6 addressing for subnets across three availability zones. The IPv4 network cidr is configurable and the IPv6 cidr is dynamically assigned by AWS.  Private subnets with a NAT gateway per availability zone can optionally be created.  Security groups and IAM roles used by Kubernetes and EKS are also deployed as part of the base networking environment.
 
 ![network](images/vpc.png)
 
 ## Kubernetes cluster architecture
+
+### K8s
+
+User -> NLB -> 3 master/etcd nodes -> 3 worker nodes
+
+### EKS
+
+User -> AWS managed control plane -> 3 worker nodes
 
 ## Prerequisites
 
@@ -131,7 +139,7 @@ ansible kube-master -i inventory/kubespray-aws-inventory.py \
 
 ## Deploying EKS stack
 
-Launch an AWS managed Kubernetes controlplane and fully configured worker nodes.
+Launch an AWS managed Kubernetes control plane and fully configured worker nodes.
 
 ```bash
 make deploy_eks NAME=sabo-demo-eks
