@@ -39,7 +39,8 @@ deploy_k8s: ## Deploy the k8s stack.
 		--parameter-overrides \
 			EnvironmentName=$(ENVNAME) \
 			KeyName=$(KEYNAME) \
-			ImageId=$(IMAGEID) \
+			MasterImageId=$(MASTERIMAGEID) \
+			WorkerImageId=$(WORKERIMAGEID) \
 			InstanceType=$(INSTANCETYPE) \
 			HostedZoneId=$(HOSTEDZONEID) \
 			MasterNodeNetworkLoadBalancerAliasName=$(ELBNAME)

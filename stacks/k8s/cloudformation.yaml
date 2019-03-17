@@ -12,8 +12,12 @@ Parameters:
     Description: The EC2 Key Pair to allow SSH access to the instances
     Type: AWS::EC2::KeyPair::KeyName
 
-  ImageId:
-    Description: AMI id for the node instances.
+  MasterImageId:
+    Description: AMI id for the master node instances.
+    Type: AWS::EC2::Image::Id
+
+  WorkerImageId:
+    Description: AMI id for the worker node instances.
     Type: AWS::EC2::Image::Id
 
   InstanceType:
@@ -125,7 +129,7 @@ Resources:
       AssociatePublicIpAddress: 'true'
       IamInstanceProfile:
         Fn::ImportValue: !Sub "${EnvironmentName}:K8sNodeInstanceProfileArn"
-      ImageId: !Ref ImageId
+      ImageId: !Ref MasterImageId
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SecurityGroups:
@@ -171,7 +175,7 @@ Resources:
       AssociatePublicIpAddress: 'true'
       IamInstanceProfile:
         Fn::ImportValue: !Sub "${EnvironmentName}:K8sNodeInstanceProfileArn"
-      ImageId: !Ref ImageId
+      ImageId: !Ref WorkerImageId
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SecurityGroups:
