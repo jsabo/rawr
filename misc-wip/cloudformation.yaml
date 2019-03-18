@@ -1,0 +1,1198 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploys a K8s cluster into a new VPC
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+
+
+Mappings:
+  EnvironmentTypeToConfig:
+    KubeSprayUbuntuK8s:
+      VpcCidrBlock: "10.0.0.0/16"
+      InstanceType: t3.large
+      ImageId: ami-0565af6e282977273 # Ubuntu xenial 16.04 LTS hvm:ebs-ssd 20190212
+      KeyName: sabo
+      VolumeSize: 30
+      CreatePrivateNetworks: false
+      HostedZoneId: Z1FI1N5HPAAV7G
+      MasterNodeNetworkLoadBalancerAliasName: tsee.yao.financial
+      CreateDNSRecords: false
+      CertificateArn: arn:aws:acm:us-east-1:810870797619:certificate/5341d625-1b48-4638-ba2e-c9987108063a
+      EKSInstanceType: t3.large
+      EKSImageId: ami-0b4eb1d8782fc3aea
+    KubeAdmUbuntu:
+      VpcCidrBlock: "10.0.0.0/16"
+      InstanceType: t3.large
+      ImageId: ami-0565af6e282977273 # Ubuntu xenial 16.04 LTS hvm:ebs-ssd 20190212
+      KeyName: sabo
+      VolumeSize: 30
+      CreatePrivateNetworks: false
+      HostedZoneId: Z1FI1N5HPAAV7G
+      MasterNodeNetworkLoadBalancerAliasName: tsee-kubeadm.yao.financial
+      CreateDNSRecords: false
+      CertificateArn: arn:aws:acm:us-east-1:810870797619:certificate/5341d625-1b48-4638-ba2e-c9987108063a
+    CentOSK8s:
+      VpcCidrBlock: "10.1.0.0/16"
+      InstanceType: t3.large
+      ImageId: ami-02eac2c0129f6376b  # CentOS 7 hvm:ebs-ssd 1901_01
+      KeyName: sabo
+      VolumeSize: 30
+      CreatePrivateNetworks: false
+      HostedZoneId: Z1FI1N5HPAAV7G
+      MasterNodeNetworkLoadBalancerAliasName: tsee-redhat.yao.financial
+      CreateDNSRecords: false
+      CreateDNSRecords: false
+      CertificateArn: arn:aws:acm:us-east-1:810870797619:certificate/5341d625-1b48-4638-ba2e-c9987108063a
+
+Conditions:
+  CreateDNSRecords:
+    Fn::Equals:
+      - !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - CreateDNSRecords
+      - True
+  CreatePrivateNetworks:
+    Fn::Equals:
+      - !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - CreatePrivateNetworks
+      - True
+
+Resources:
+
+  #
+  # SSM Parameters
+  #
+  EKSImageId:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Name: !Sub "/${AWS::StackName}/EKSImageId"
+      Type: String
+      Description: AMI id for the node instances.
+      Value: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - EKSImageId
+
+  EKSInstanceType:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Name: !Sub "/${AWS::StackName}/EKSInstanceType"
+      Type: String
+      Description: EC2 instance type for the node instances
+      Value: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - EKSInstanceType
+
+  #
+  # Public VPC
+  #
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - VpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+  IPv6CidrBlock:
+    Type: 'AWS::EC2::VPCCidrBlock'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AmazonProvidedIpv6CidrBlock: true
+
+  #
+  # Internet gateways (ipv4, and egress for ipv6)
+  #
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-igw'
+  IGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: IGW
+      VpcId:
+        Ref: VPC
+  EgressOnlyIGW:
+    Type: AWS::EC2::EgressOnlyInternetGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId: !Ref VPC
+
+  #
+  # Public route table
+  #
+  PublicRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt'
+  PublicDefaultIpv4Route:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicRt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: IGW
+  PublicDefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PublicRt
+      GatewayId:
+        Ref: IGW
+
+  #
+  # Public subnets
+  #
+  PublicSubnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '01::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-public-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet0RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet0
+      RouteTableId:
+        Ref: PublicRt
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '02::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-public-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRt
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: '03::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 2
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-public-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRt
+
+  #
+  # Private route tables
+  #
+  PrivateRt0:
+    Type: AWS::EC2::RouteTable
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-private-rt-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+  NAT0:
+    Type: AWS::EC2::NatGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP0
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet0
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-nat-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+  EIP0:
+    Type: AWS::EC2::EIP
+    Condition: CreatePrivateNetworks
+    Properties:
+      Domain: vpc
+  NatRoute0:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      RouteTableId:
+        Ref: PrivateRt0
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT0
+  PrivateRt0DefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PrivateRt0
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyIGW
+
+  PrivateRt1:
+    Type: AWS::EC2::RouteTable
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-private-rt-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+  NAT1:
+    Type: AWS::EC2::NatGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP1
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-nat-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+  EIP1:
+    Type: AWS::EC2::EIP
+    Condition: CreatePrivateNetworks
+    Properties:
+      Domain: vpc
+  NatRoute1:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      RouteTableId:
+        Ref: PrivateRt1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT1
+  PrivateRt1DefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PrivateRt1
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyIGW
+
+  PrivateRt2:
+    Type: AWS::EC2::RouteTable
+    Condition: CreatePrivateNetworks
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-private-rt-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+  NAT2:
+    Type: AWS::EC2::NatGateway
+    Condition: CreatePrivateNetworks
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP2
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-nat-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+  EIP2:
+    Type: AWS::EC2::EIP
+    Condition: CreatePrivateNetworks
+    Properties:
+      Domain: vpc
+  NatRoute2:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      RouteTableId:
+        Ref: PrivateRt2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT2
+  PrivateRt2DefaultIpv6Route:
+    Type: AWS::EC2::Route
+    Condition: CreatePrivateNetworks
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      RouteTableId: !Ref PrivateRt2
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyIGW
+
+  #
+  # Private subnets
+  #
+  PrivateSubnet0:
+    Type: AWS::EC2::Subnet
+    Condition: CreatePrivateNetworks
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 30, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: 'a1::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-private-${AZ}
+              - AZ: !Select
+                - 0
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubne01RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreatePrivateNetworks
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet0
+      RouteTableId:
+        Ref: PrivateRt0
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: CreatePrivateNetworks
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 31, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: 'a2::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-private-${AZ}
+              - AZ: !Select
+                - 1
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubnet1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreatePrivateNetworks
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRt1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreatePrivateNetworks
+    DependsOn:
+      - VPC
+      - IPv6CidrBlock
+    Properties:
+      CidrBlock: !Select [ 32, !Cidr [ !GetAtt VPC.CidrBlock, 34, 8 ]]
+      Ipv6CidrBlock:
+        Fn::Sub:
+          - "${VpcPart}${SubnetPart}"
+          - SubnetPart: 'a3::/64'
+            VpcPart: !Select [ 0, !Split [ '00::/56', !Select [ 0, !GetAtt VPC.Ipv6CidrBlocks ]]]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Select
+        - 2
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Sub:
+              - ${AWS::StackName}-private-${AZ}
+              - AZ: !Select
+                - 2
+                - Fn::GetAZs: ""
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubnet2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreatePrivateNetworks
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2
+      RouteTableId:
+        Ref: PrivateRt2
+
+  #
+  # Security groups
+  #
+  MasterNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all master nodes in the cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-master-node-sg"
+
+  K8sAPIServerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "kubernetes API server"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6443
+      ToPort: 6443
+
+  EtcdServerClientAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "etcd server client API"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2379
+      ToPort: 2380
+
+  MasterKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "master kubelet API"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  KubeSchedulerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "kube-cheduler"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10251
+      ToPort: 10251
+
+  KubeControllerManagerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "kube-controller-manager"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10252
+      ToPort: 10252
+
+  NetworkLoadBalancerIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "network loadbalancer"
+      GroupId: !Ref MasterNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 6443
+      ToPort: 6443
+
+  MasterSecureShellManagmentIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "master secure shell management"
+      GroupId: !Ref MasterNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
+  WorkerNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all worker nodes in the cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-worker-node-sg"
+
+  WorkerKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker kubelet API"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      SourceSecurityGroupId: !Ref WorkerNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  WorkerControlPlaneKubletAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker control plane kubelet API"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  WorkerNodePortServicesIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker nodeport services"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 30000
+      ToPort: 32767
+
+  WorkerSecureShellManagmentIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSecurityGroup
+    Properties:
+      Description: "worker secure shell management"
+      GroupId: !Ref WorkerNodeSecurityGroup
+      CidrIp: "0.0.0.0/0"
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
+  CloudProviderAWSSecurityGroup:
+    # https://github.com/kubernetes/cloud-provider-aws
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for cloud provider AWS plugin
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-cloud-provider-aws-sg"
+        - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+          Value: ""
+
+  TigeraSecureNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all tsee nodes in the cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-tsee-node-sg"
+
+  TigeraSecureBGPNetworkingIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: TigeraSecureNodeSecurityGroup
+    Properties:
+      Description: "tigera secure ee networking (BGP)"
+      GroupId: !Ref TigeraSecureNodeSecurityGroup
+      SourceSecurityGroupId: !Ref TigeraSecureNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 179
+      ToPort: 179
+
+  TigeraSecureIPinIPNetworkingIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: TigeraSecureNodeSecurityGroup
+    Properties:
+      Description: "tigera secure ee IP-in-IP mode"
+      GroupId: !Ref TigeraSecureNodeSecurityGroup
+      SourceSecurityGroupId: !Ref TigeraSecureNodeSecurityGroup
+      IpProtocol: "4"
+      FromPort: "-1"
+      ToPort: "-1"
+
+  EKSClusterControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Managed Kubernetes on AWS Control Plane Security Group
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-ekscp-sg"
+
+  EKSNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all nodes in the EKS cluster
+      VpcId:
+        !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-ekscp-sg"
+        - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+          Value: 'owned'
+
+  EKSNodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: '-1'
+      FromPort: 0
+      ToPort: 65535
+
+  EKSNodeSecurityGroupFromControlPlaneIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  EKSControlPlaneEgressToNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  EKSNodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  EKSControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  EKSClusterControlPlaneSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      SourceSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+      FromPort: 443
+
+  #
+  # IAM Roles
+  #
+  EKSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      RoleName: !Sub "${AWS::StackName}-EKSServiceRole"
+
+  K8sNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - !Ref K8sNodeInstanceRole
+
+  K8sNodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        -
+          PolicyName: !Sub "${AWS::StackName}-K8sExternalDNS"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            - Effect: "Allow"
+              Action: "route53:ChangeResourceRecordSets"
+              Resource: "arn:aws:route53:::hostedzone/*"
+            - Effect: "Allow"
+              Action:
+                - "acm:DescribeCertificate"
+                - "acm:ListCertificates"
+                - "acm:GetCertificate"
+                - "ec2:AuthorizeSecurityGroupIngress"
+                - "ec2:CreateSecurityGroup"
+                - "ec2:CreateTags"
+                - "ec2:DeleteTags"
+                - "ec2:DeleteSecurityGroup"
+                - "ec2:DescribeAccountAttributes"
+                - "ec2:DescribeAddresses"
+                - "ec2:DescribeInstances"
+                - "ec2:DescribeInstanceStatus"
+                - "ec2:DescribeInternetGateways"
+                - "ec2:DescribeSecurityGroups"
+                - "ec2:DescribeSubnets"
+                - "ec2:DescribeTags"
+                - "ec2:DescribeVpcs"
+                - "ec2:ModifyInstanceAttribute"
+                - "ec2:ModifyNetworkInterfaceAttribute"
+                - "ec2:RevokeSecurityGroupIngress"
+                - "elasticloadbalancing:AddTags"
+                - "elasticloadbalancing:CreateListener"
+                - "elasticloadbalancing:CreateLoadBalancer"
+                - "elasticloadbalancing:CreateRule"
+                - "elasticloadbalancing:CreateTargetGroup"
+                - "elasticloadbalancing:ConfigureHealthCheck"
+                - "elasticloadbalancing:DeleteListener"
+                - "elasticloadbalancing:DeleteLoadBalancer"
+                - "elasticloadbalancing:DeleteLoadBalancerListeners"
+                - "elasticloadbalancing:DeleteRule"
+                - "elasticloadbalancing:DeleteTargetGroup"
+                - "elasticloadbalancing:DeregisterTargets"
+                - "elasticloadbalancing:DescribeListeners"
+                - "elasticloadbalancing:DescribeLoadBalancers"
+                - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+                - "elasticloadbalancing:DescribeRules"
+                - "elasticloadbalancing:DescribeSSLPolicies"
+                - "elasticloadbalancing:DescribeTags"
+                - "elasticloadbalancing:DescribeTargetGroups"
+                - "elasticloadbalancing:DescribeTargetGroupAttributes"
+                - "elasticloadbalancing:DescribeTargetHealth"
+                - "elasticloadbalancing:ModifyListener"
+                - "elasticloadbalancing:ModifyLoadBalancerAttributes"
+                - "elasticloadbalancing:ModifyRule"
+                - "elasticloadbalancing:ModifyTargetGroup"
+                - "elasticloadbalancing:ModifyTargetGroupAttributes"
+                - "elasticloadbalancing:RegisterTargets"
+                - "elasticloadbalancing:RemoveTags"
+                - "elasticloadbalancing:SetIpAddressType"
+                - "elasticloadbalancing:SetSecurityGroups"
+                - "elasticloadbalancing:SetSubnets"
+                - "elasticloadbalancing:SetWebACL"
+                - "iam:CreateServiceLinkedRole"
+                - "iam:GetServerCertificate"
+                - "iam:ListServerCertificates"
+                - "route53:ListHostedZones"
+                - "route53:ListResourceRecordSets"
+                - "waf:GetWebACL"
+                - "waf-regional:GetWebACLForResource"
+                - "waf-regional:GetWebACLForResource"
+                - "waf-regional:GetWebACL"
+                - "waf-regional:AssociateWebACL"
+                - "waf-regional:DisassociateWebACL"
+                - "tag:GetResources"
+                - "tag:TagResources"
+              Resource: "*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      RoleName: !Sub "${AWS::StackName}-K8sNodeInstanceRole"
+
+  #
+  # K8s Cluster
+  #
+  MasterNodeNetworkLoadBalancerDNSName:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - HostedZoneId
+      RecordSets:
+        - Name: !FindInMap
+            - EnvironmentTypeToConfig
+            - !Ref EnvironmentType
+            - MasterNodeNetworkLoadBalancerAliasName
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt MasterNodesNetworkLoadBalancer.CanonicalHostedZoneID
+            DNSName: !GetAtt MasterNodesNetworkLoadBalancer.DNSName
+
+  MasterNodesNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${AWS::StackName}-masterNodes-lb"
+      Scheme: "internet-facing"
+      Subnets:
+        - !Ref PublicSubnet0
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      LoadBalancerAttributes:
+        - Key: "load_balancing.cross_zone.enabled"
+          Value: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-masterNodes-lb"
+      Type: "network"
+
+  MasterNodesNetworkLoadBalancerHTTPSListener:
+    Type : AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        -
+          Type: forward
+          TargetGroupArn: !Ref MasterNodesTargetGroup
+      LoadBalancerArn: !Ref MasterNodesNetworkLoadBalancer
+      Port: 6443
+      Protocol: TCP
+
+  MasterNodesTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-masterNodes-tg"
+      Port: 6443
+      Protocol: TCP
+      HealthCheckPort: 6443
+      HealthCheckProtocol: TCP
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-masterNodes-tg"
+
+  MasterNodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
+      DesiredCapacity: 3
+      LaunchConfigurationName: !Ref MasterNodeLaunchConfig
+      MinSize: 3
+      MaxSize: 3
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet0
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      TargetGroupARNs:
+        - !Ref MasterNodesTargetGroup
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-master-node"
+        PropagateAtLaunch: 'true'
+      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+        Value: ""
+        PropagateAtLaunch: 'true'
+      - Key: "kubespray-role"
+        Value: "kube-master, etcd"
+        PropagateAtLaunch: 'true'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+
+  MasterNodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      IamInstanceProfile: !Ref K8sNodeInstanceProfile
+      ImageId: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - ImageId
+      InstanceType: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - InstanceType
+      KeyName: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - KeyName
+      SecurityGroups:
+        - !Ref MasterNodeSecurityGroup
+        - !Ref TigeraSecureNodeSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !FindInMap
+              - EnvironmentTypeToConfig
+              - !Ref EnvironmentType
+              - VolumeSize
+            VolumeType: gp2
+            DeleteOnTermination: true
+
+  WorkerNodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-worker-asg"
+      DesiredCapacity: 3
+      LaunchConfigurationName: !Ref WorkerNodeLaunchConfig
+      MinSize: 3
+      MaxSize: 3
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet0
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-worker-node"
+        PropagateAtLaunch: 'true'
+      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+        Value: ""
+        PropagateAtLaunch: 'true'
+      - Key: "kubespray-role"
+        Value: "kube-node"
+        PropagateAtLaunch: 'true'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+
+  WorkerNodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      IamInstanceProfile: !Ref K8sNodeInstanceProfile
+      ImageId: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - ImageId
+      InstanceType: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - InstanceType
+      KeyName: !FindInMap
+        - EnvironmentTypeToConfig
+        - !Ref EnvironmentType
+        - KeyName
+      SecurityGroups:
+        - !Ref WorkerNodeSecurityGroup
+        - !Ref TigeraSecureNodeSecurityGroup
+        - !Ref CloudProviderAWSSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !FindInMap
+              - EnvironmentTypeToConfig
+              - !Ref EnvironmentType
+              - VolumeSize
+            VolumeType: gp2
+            DeleteOnTermination: true
+
+Outputs:
+
+  VPC:
+    Description: "Virtual private network"
+    Value: !Ref VPC
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", VPC ] ]
+
+  PublicSubnet0:
+    Description: "First public subnet"
+    Value: !Ref PublicSubnet0
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", PublicSubnet0 ] ]
+
+  PublicSubnet1:
+    Description: "Second public subnet"
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", PublicSubnet1 ] ]
+
+  PublicSubnet2:
+    Description: "Third public subnet"
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", PublicSubnet2 ] ]
+
+  PrivateSubnet0:
+    Condition: CreatePrivateNetworks
+    Description: "First private subnet"
+    Value: !Ref PrivateSubnet0
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", PrivateSubnet0 ] ]
+
+  PrivateSubnet1:
+    Condition: CreatePrivateNetworks
+    Description: "Second private subnet"
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", PrivateSubnet1 ] ]
+
+  PrivateSubnet2:
+    Condition: CreatePrivateNetworks
+    Description: "Third private subnet"
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", PrivateSubnet2 ] ]
+
+  EKSServiceRoleArn:
+    Description: "Allows EKS to manage clusters on your behalf."
+    Value: !GetAtt EKSServiceRole.Arn
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSServiceRoleArn ] ]
+
+  K8sNodeInstanceProfileArn:
+    Description: "K8s Node Instance Profile"
+    Value: !GetAtt K8sNodeInstanceProfile.Arn
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", K8sNodeInstanceProfileArn ] ]
+
+  EKSClusterControlPlaneSecurityGroup:
+    Description: "Managed Kubernetes on AWS Control Plane Security Group"
+    Value: !Ref EKSClusterControlPlaneSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSClusterControlPlaneSecurityGroup ] ]
+
+  EKSNodeSecurityGroup:
+    Description: "Security group for all nodes in the EKS cluster"
+    Value: !Ref EKSNodeSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", EKSNodeSecurityGroup ] ]

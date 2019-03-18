@@ -1,0 +1,315 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploys a EKS cluster into a base networking environment
+
+Parameters:
+
+  VPCID:
+    Description: The VPC to use
+    Type: AWS::EC2::VPC::Id
+
+  PublicSubnet0:
+    Description: The EC2 Subnet to use
+    Type: AWS::EC2::Subnet::Id
+
+  PublicSubnet1:
+    Description: The EC2 Subnet to use
+    Type: AWS::EC2::Subnet::Id
+
+  PublicSubnet2:
+    Description: The EC2 Subnet to use
+    Type: AWS::EC2::Subnet::Id
+
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+
+  ImageId:
+    Description: AMI id for the node instances.
+    Type: AWS::EC2::Image::Id
+
+  InstanceType:
+    Description: EC2 instance type for the node instances
+    Type: String
+
+  BootstrapArguments:
+    Description: Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami
+    Default: ""
+    Type: String
+
+Resources:
+
+  EKSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      RoleName: !Sub "${AWS::StackName}-EKSServiceRole"
+
+  K8sNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - !Ref K8sNodeInstanceRole
+
+  K8sNodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        -
+          PolicyName: !Sub "${AWS::StackName}-K8sExternalDNS"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            - Effect: "Allow"
+              Action: "route53:ChangeResourceRecordSets"
+              Resource: "arn:aws:route53:::hostedzone/*"
+            - Effect: "Allow"
+              Action:
+                - "acm:DescribeCertificate"
+                - "acm:ListCertificates"
+                - "acm:GetCertificate"
+                - "ec2:AuthorizeSecurityGroupIngress"
+                - "ec2:CreateSecurityGroup"
+                - "ec2:CreateTags"
+                - "ec2:DeleteTags"
+                - "ec2:DeleteSecurityGroup"
+                - "ec2:DescribeAccountAttributes"
+                - "ec2:DescribeAddresses"
+                - "ec2:DescribeInstances"
+                - "ec2:DescribeInstanceStatus"
+                - "ec2:DescribeInternetGateways"
+                - "ec2:DescribeSecurityGroups"
+                - "ec2:DescribeSubnets"
+                - "ec2:DescribeTags"
+                - "ec2:DescribeVpcs"
+                - "ec2:ModifyInstanceAttribute"
+                - "ec2:ModifyNetworkInterfaceAttribute"
+                - "ec2:RevokeSecurityGroupIngress"
+                - "elasticloadbalancing:AddTags"
+                - "elasticloadbalancing:CreateListener"
+                - "elasticloadbalancing:CreateLoadBalancer"
+                - "elasticloadbalancing:CreateRule"
+                - "elasticloadbalancing:CreateTargetGroup"
+                - "elasticloadbalancing:ConfigureHealthCheck"
+                - "elasticloadbalancing:DeleteListener"
+                - "elasticloadbalancing:DeleteLoadBalancer"
+                - "elasticloadbalancing:DeleteLoadBalancerListeners"
+                - "elasticloadbalancing:DeleteRule"
+                - "elasticloadbalancing:DeleteTargetGroup"
+                - "elasticloadbalancing:DeregisterTargets"
+                - "elasticloadbalancing:DescribeListeners"
+                - "elasticloadbalancing:DescribeLoadBalancers"
+                - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+                - "elasticloadbalancing:DescribeRules"
+                - "elasticloadbalancing:DescribeSSLPolicies"
+                - "elasticloadbalancing:DescribeTags"
+                - "elasticloadbalancing:DescribeTargetGroups"
+                - "elasticloadbalancing:DescribeTargetGroupAttributes"
+                - "elasticloadbalancing:DescribeTargetHealth"
+                - "elasticloadbalancing:ModifyListener"
+                - "elasticloadbalancing:ModifyLoadBalancerAttributes"
+                - "elasticloadbalancing:ModifyRule"
+                - "elasticloadbalancing:ModifyTargetGroup"
+                - "elasticloadbalancing:ModifyTargetGroupAttributes"
+                - "elasticloadbalancing:RegisterTargets"
+                - "elasticloadbalancing:RemoveTags"
+                - "elasticloadbalancing:SetIpAddressType"
+                - "elasticloadbalancing:SetSecurityGroups"
+                - "elasticloadbalancing:SetSubnets"
+                - "elasticloadbalancing:SetWebACL"
+                - "iam:CreateServiceLinkedRole"
+                - "iam:GetServerCertificate"
+                - "iam:ListServerCertificates"
+                - "route53:ListHostedZones"
+                - "route53:ListResourceRecordSets"
+                - "waf:GetWebACL"
+                - "waf-regional:GetWebACLForResource"
+                - "waf-regional:GetWebACLForResource"
+                - "waf-regional:GetWebACL"
+                - "waf-regional:AssociateWebACL"
+                - "waf-regional:DisassociateWebACL"
+                - "tag:GetResources"
+                - "tag:TagResources"
+              Resource: "*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      RoleName: !Sub "${AWS::StackName}-K8sNodeInstanceRole"
+
+  EKSClusterControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Managed Kubernetes on AWS Control Plane Security Group
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-eks-master-sg"
+
+  EKSNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all nodes in the EKS cluster
+      VpcId:
+        !Ref VPCID
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-eks-worker-sg"
+        - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+          Value: 'owned'
+
+  EKSNodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: '-1'
+      FromPort: 0
+      ToPort: 65535
+
+  EKSNodeSecurityGroupFromControlPlaneIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  EKSControlPlaneEgressToNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  EKSNodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      GroupId: !Ref EKSNodeSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  EKSControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  EKSClusterControlPlaneSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EKSNodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      GroupId: !Ref EKSClusterControlPlaneSecurityGroup
+      SourceSecurityGroupId: !Ref EKSNodeSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+      FromPort: 443
+
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Sub "${AWS::StackName}-eks"
+      Version: "1.11"
+      RoleArn:
+        !Ref EKSServiceRole
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          !Ref EKSClusterControlPlaneSecurityGroup
+        SubnetIds:
+          - !Ref PublicSubnet0
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+
+  NodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: EKSCluster
+    Properties:
+      AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
+      DesiredCapacity: 3
+      LaunchConfigurationName: !Ref NodeLaunchConfig
+      MinSize: 3
+      MaxSize: 3
+      VPCZoneIdentifier:
+          - !Ref PublicSubnet0
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-eks-node"
+        PropagateAtLaunch: 'true'
+      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+        Value: 'owned'
+        PropagateAtLaunch: 'true'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+
+  NodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    DependsOn: EKSCluster
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      IamInstanceProfile:
+        !Ref K8sNodeInstanceProfile
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref EKSNodeSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp2
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -o xtrace
+            /etc/eks/bootstrap.sh ${AWS::StackName} ${BootstrapArguments}
+            /opt/aws/bin/cfn-signal --exit-code $? \
+                     --stack ${AWS::StackName} \
+                     --resource NodeGroup  \
+                     --region ${AWS::Region}
