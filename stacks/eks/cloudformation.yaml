@@ -47,9 +47,9 @@ Resources:
     DependsOn: EKSCluster
     Properties:
       AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
-      DesiredCapacity: 3
+      DesiredCapacity: 2
       LaunchConfigurationName: !Ref NodeLaunchConfig
-      MinSize: 3
+      MinSize: 1
       MaxSize: 3
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet0"
