@@ -248,7 +248,7 @@ Resources:
   EKSCluster:
     Type: AWS::EKS::Cluster
     Properties:
-      Name: !Sub "${AWS::StackName}-eks"
+      Name: !Sub "${AWS::StackName}"
       Version: "1.11"
       RoleArn:
         !Ref EKSServiceRole
@@ -275,7 +275,7 @@ Resources:
           - !Ref PublicSubnet2
       Tags:
       - Key: Name
-        Value: !Sub "${AWS::StackName}-eks-node"
+        Value: !Sub "${AWS::StackName}-worker-node"
         PropagateAtLaunch: 'true'
       - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
         Value: 'owned'
@@ -311,5 +311,5 @@ Resources:
             /etc/eks/bootstrap.sh ${AWS::StackName} ${BootstrapArguments}
             /opt/aws/bin/cfn-signal --exit-code $? \
                      --stack ${AWS::StackName} \
-                     --resource NodeGroup  \
+                     --resource NodeGroup \
                      --region ${AWS::Region}
