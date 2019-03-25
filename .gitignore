@@ -9,6 +9,7 @@ env_*/
 .env
 dist/
 misc
+aws-auth-cm.yaml
 node_modules/
 vendor
 *~
