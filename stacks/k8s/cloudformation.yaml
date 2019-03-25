@@ -98,7 +98,7 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
-      DesiredCapacity: 2
+      DesiredCapacity: 3
       LaunchConfigurationName: !Ref MasterNodeLaunchConfig
       MinSize: 1
       MaxSize: 3
@@ -146,7 +146,7 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub "${AWS::StackName}-worker-asg"
-      DesiredCapacity: 2
+      DesiredCapacity: 3
       LaunchConfigurationName: !Ref WorkerNodeLaunchConfig
       MinSize: 1
       MaxSize: 3
