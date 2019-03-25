@@ -511,13 +511,24 @@ Resources:
       FromPort: 6443
       ToPort: 6443
 
-  EtcdServerClientAPIIngress:
+  MasterEtcdServerClientAPIIngress:
     Type: AWS::EC2::SecurityGroupIngress
     DependsOn: MasterNodeSecurityGroup
     Properties:
       Description: "etcd server client API"
       GroupId: !Ref MasterNodeSecurityGroup
       SourceSecurityGroupId: !Ref MasterNodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2379
+      ToPort: 2380
+
+  WorkerEtcdServerClientAPIIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: MasterNodeSecurityGroup
+    Properties:
+      Description: "etcd server client API"
+      GroupId: !Ref MasterNodeSecurityGroup
+      SourceSecurityGroupId: !Ref WorkerNodeSecurityGroup
       IpProtocol: tcp
       FromPort: 2379
       ToPort: 2380
