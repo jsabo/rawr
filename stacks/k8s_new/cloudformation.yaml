@@ -456,7 +456,7 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub "${AWS::StackName}-worker-asg"
-      DesiredCapacity: 3
+      DesiredCapacity: 2
       LaunchConfigurationName: !Ref WorkerNodeLaunchConfig
       MinSize: 1
       MaxSize: 3
