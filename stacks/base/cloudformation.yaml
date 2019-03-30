@@ -19,6 +19,10 @@ Parameters:
 Conditions:
   CreatePrivateNetworks:
     !Equals [true, !Ref CreatePrivateNetworks]
+  UsEast1Condition:
+    Fn::Equals:
+    - !Ref AWS::Region
+    - "us-east-1"
 
 Resources:
 
@@ -39,6 +43,25 @@ Resources:
     Properties:
       VpcId: !Ref 'VPC'
       AmazonProvidedIpv6CidrBlock: true
+
+  DHCPOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName:
+        # us-east-1 needs .ec2.internal, the rest of the regions get <region>.compute.internal.
+        # See http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_DHCP_Options.html
+        Fn::If:
+        - UsEast1Condition
+        - "ec2.internal"
+        - !Sub "${AWS::Region}.compute.internal"
+      DomainNameServers:
+      - AmazonProvidedDNS
+
+  VPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VPC
+      DhcpOptionsId: !Ref DHCPOptions
 
   #
   # Internet gateways (ipv4, and egress for ipv6)
@@ -653,7 +676,7 @@ Resources:
         - Key: "Name"
           Value: !Sub "${AWS::StackName}-cloud-provider-aws-sg"
         - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
-          Value: ""
+          Value: "shared"
 
   TigeraSecureNodeSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -705,8 +728,6 @@ Resources:
       Tags:
         - Key: "Name"
           Value: !Sub "${AWS::StackName}-eks-worker-sg"
-        - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
-          Value: 'owned'
 
   EKSNodeSecurityGroupIngress:
     Type: AWS::EC2::SecurityGroupIngress
@@ -845,8 +866,10 @@ Resources:
                 - "ec2:ModifyNetworkInterfaceAttribute"
                 - "ec2:RevokeSecurityGroupIngress"
                 - "elasticloadbalancing:AddTags"
+                - "elasticloadbalancing:AttachLoadBalancerToSubnets"
                 - "elasticloadbalancing:CreateListener"
                 - "elasticloadbalancing:CreateLoadBalancer"
+                - "elasticloadbalancing:CreateLoadBalancerListeners"
                 - "elasticloadbalancing:CreateRule"
                 - "elasticloadbalancing:CreateTargetGroup"
                 - "elasticloadbalancing:ConfigureHealthCheck"
@@ -865,12 +888,14 @@ Resources:
                 - "elasticloadbalancing:DescribeTargetGroups"
                 - "elasticloadbalancing:DescribeTargetGroupAttributes"
                 - "elasticloadbalancing:DescribeTargetHealth"
+                - "elasticloadbalancing:DetachLoadBalancerFromSubnets"
                 - "elasticloadbalancing:ModifyListener"
                 - "elasticloadbalancing:ModifyLoadBalancerAttributes"
                 - "elasticloadbalancing:ModifyRule"
                 - "elasticloadbalancing:ModifyTargetGroup"
                 - "elasticloadbalancing:ModifyTargetGroupAttributes"
                 - "elasticloadbalancing:RegisterTargets"
+                - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
                 - "elasticloadbalancing:RemoveTags"
                 - "elasticloadbalancing:SetIpAddressType"
                 - "elasticloadbalancing:SetSecurityGroups"

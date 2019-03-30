@@ -112,9 +112,6 @@ Resources:
       - Key: Name
         Value: !Sub "${AWS::StackName}-master-node"
         PropagateAtLaunch: 'true'
-      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
-        Value: ""
-        PropagateAtLaunch: 'true'
       - Key: "kubespray-role"
         Value: "kube-master, etcd"
         PropagateAtLaunch: 'true'
@@ -159,7 +156,7 @@ Resources:
         Value: !Sub "${AWS::StackName}-worker-node"
         PropagateAtLaunch: 'true'
       - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
-        Value: ""
+        Value: "shared"
         PropagateAtLaunch: 'true'
       - Key: "kubespray-role"
         Value: "kube-node"

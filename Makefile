@@ -13,6 +13,7 @@ deploy_base: ## Deploy the base stack.
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
 		--template-file stacks/base/cloudformation.yaml \
+		--tags StackType="base" \
 		--stack-name $(ENVNAME) \
 		--parameter-overrides \
 			VpcCidrBlock=$(VPCCIDR) \
@@ -23,6 +24,10 @@ teardown_base: ## Teardown the base stack.
 	aws cloudformation delete-stack --stack-name $(ENVNAME)
 	# Wait for the stack to be torn down.
 	aws cloudformation wait stack-delete-complete --stack-name $(ENVNAME)
+
+.PHONY: list_base
+list_base: ## List the base stacks.
+	@aws cloudformation describe-stacks --query 'Stacks[].{Name: StackName, Tags: Tags[0]}[?Tags.Value==`base`].Name' --output text
 
 ##@ Manage k8s environments.
 .PHONY: test_k8s
@@ -35,6 +40,7 @@ deploy_k8s: ## Deploy the k8s stack.
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
 		--template-file stacks/k8s/cloudformation.yaml \
+		--tags StackType="k8s" \
 		--stack-name $(NAME) \
 		--parameter-overrides \
 			EnvironmentName=$(ENVNAME) \
@@ -51,6 +57,10 @@ teardown_k8s: ## Teardown the k8s stack.
 	# Wait for the stack to be torn down.
 	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
 
+.PHONY: list_k8s
+list_k8s: ## List the k8s stacks.
+	@aws cloudformation describe-stacks --query 'Stacks[].{Name: StackName, Tags: Tags[0]}[?Tags.Value==`k8s`].Name' --output text
+
 ##@ Manage eks environments.
 .PHONY: test_eks
 test_eks: ## Test eks stack.
@@ -62,6 +72,7 @@ deploy_eks: ## Deploy the eks stack.
 		--no-fail-on-empty-changeset \
 		--capabilities CAPABILITY_NAMED_IAM \
 		--template-file stacks/eks/cloudformation.yaml \
+		--tags StackType="eks" \
 		--stack-name $(NAME) \
 		--parameter-overrides \
 			EnvironmentName=$(ENVNAME) \
@@ -75,6 +86,10 @@ teardown_eks: ## Teardown the eks stack.
 	aws cloudformation delete-stack --stack-name $(NAME)
 	# Wait for the stack to be torn down.
 	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
+
+.PHONY: list_eks
+list_eks: ## List the eks stacks.
+	@aws cloudformation describe-stacks --query 'Stacks[].{Name: StackName, Tags: Tags[0]}[?Tags.Value==`eks`].Name' --output text
 
 ##@ Help
 .PHONY: help
