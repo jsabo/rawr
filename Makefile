@@ -91,6 +91,38 @@ teardown_eks: ## Teardown the eks stack.
 list_eks: ## List the eks stacks.
 	@aws cloudformation describe-stacks --query 'Stacks[].{Name: StackName, Tags: Tags[0]}[?Tags.Value==`eks`].Name' --output text
 
+##@ Manage ocp environments.
+.PHONY: test_ocp
+test_ocp: ## Test ocp stack.
+	aws cloudformation validate-template --template-body file://stacks/ocp/cloudformation.yaml
+
+.PHONY: deploy_ocp
+deploy_ocp: ## Deploy the ocp stack.
+	aws cloudformation deploy \
+    --no-fail-on-empty-changeset \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --template-file stacks/ocp/cloudformation.yaml \
+    --tags StackType="ocp" \
+    --stack-name $(NAME) \
+    --parameter-overrides \
+      EnvironmentName=$(ENVNAME) \
+      KeyName=$(KEYNAME) \
+      MasterImageId=$(OCPMASTERIMAGEID) \
+      WorkerImageId=$(OCPWORKERIMAGEID) \
+      InstanceType=$(OCPINSTANCETYPE) \
+      HostedZoneId=$(HOSTEDZONEID) \
+      MasterNodeNetworkLoadBalancerAliasName=$(OCPELBNAME)
+
+.PHONY: teardown_ocp
+teardown_ocp: ## Teardown the ocp stack.
+	aws cloudformation delete-stack --stack-name $(NAME)
+	# Wait for the stack to be torn down.
+	aws cloudformation wait stack-delete-complete --stack-name $(NAME)
+
+.PHONY: list_ocp
+list_ocp: ## List the ocp stacks.
+	@aws cloudformation describe-stacks --query 'Stacks[].{Name: StackName, Tags: Tags[0]}[?Tags.Value==`ocp`].Name' --output text
+
 ##@ Help
 .PHONY: help
 help:  ## Type make followed by target you wish to run.
