@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Deploys a K8s cluster into a base networking environment
+Description: Deploys an OCP cluster into a base networking environment
 
 Parameters:
 
@@ -101,7 +101,7 @@ Resources:
       DesiredCapacity: 3
       LaunchConfigurationName: !Ref MasterNodeLaunchConfig
       MinSize: 1
-      MaxSize: 3
+      MaxSize: 1
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet0"
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet1"
@@ -138,7 +138,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 30
+            VolumeSize: 100
             VolumeType: gp2
             DeleteOnTermination: true
 
@@ -149,7 +149,7 @@ Resources:
       DesiredCapacity: 2
       LaunchConfigurationName: !Ref WorkerNodeLaunchConfig
       MinSize: 1
-      MaxSize: 3
+      MaxSize: 2
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet0"
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet1"
@@ -185,6 +185,6 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 30
+            VolumeSize: 100
             VolumeType: gp2
             DeleteOnTermination: true
