@@ -17,6 +17,7 @@ vendor
 *.log
 artifacts/
 local-config.mk
+local-config.mk*
 build/
 pkg/
 .pytest_cache
