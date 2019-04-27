@@ -595,7 +595,7 @@ Resources:
     Properties:
       Description: "network loadbalancer"
       GroupId: !Ref MasterNodeSecurityGroup
-      CidrIp: "199.116.73.11/32"
+      CidrIp: "74.96.170.111/32"
       IpProtocol: tcp
       FromPort: 6443
       ToPort: 6443
