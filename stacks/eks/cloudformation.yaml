@@ -31,7 +31,7 @@ Resources:
     Type: AWS::EKS::Cluster
     Properties:
       Name: !Sub "${AWS::StackName}"
-      Version: "1.11"
+      Version: "1.12"
       RoleArn:
         Fn::ImportValue: !Sub "${EnvironmentName}:EKSServiceRoleArn"
       ResourcesVpcConfig:
@@ -82,7 +82,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: 30
+            VolumeSize: 100
             VolumeType: gp2
             DeleteOnTermination: true
       UserData:
