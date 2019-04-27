@@ -115,6 +115,9 @@ Resources:
       - Key: "kubespray-role"
         Value: "kube-master, etcd"
         PropagateAtLaunch: 'true'
+      - Key: !Sub "kubernetes.io/cluster/${AWS::StackName}"
+        Value: "shared"
+        PropagateAtLaunch: 'true'
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MinInstancesInService: '1'
