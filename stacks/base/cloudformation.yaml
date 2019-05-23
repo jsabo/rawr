@@ -795,6 +795,133 @@ Resources:
       ToPort: 443
       FromPort: 443
 
+  OpenshiftMasterSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Openshift Security Group for Master node
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 74.96.170.111/32
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 74.96.170.111/32
+        - IpProtocol: tcp
+          FromPort: 8443
+          ToPort: 8443
+          CidrIp: 74.96.170.111/32
+
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-ocp-master-sg"
+
+  OpenshiftSSHSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Openshift Security Group for Internal SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-ocp-admin-sg"
+
+  OpenshiftInternalSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Openshift Security Group for Internal nodes
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-ocp-int-sg"
+
+  Internal53TCPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 53
+      ToPort: 53
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal8053TCPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8053
+      ToPort: 8053
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal8053UDPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: udp
+      FromPort: 8053
+      ToPort: 8053
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal53UDPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: udp
+      FromPort: 53
+      ToPort: 53
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal179TCPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 179
+      ToPort: 179
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal2379TCPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2379
+      ToPort: 2379
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal4789TCPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 4789
+      ToPort: 4789
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  Internal10250TCPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
+  InternalIPinIPIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref OpenshiftInternalSecurityGroup
+      IpProtocol: "4"
+      FromPort: "-1"
+      ToPort: "-1"
+      SourceSecurityGroupId: !Ref OpenshiftInternalSecurityGroup
+
   #
   # IAM Roles
   #
@@ -1015,3 +1142,21 @@ Outputs:
     Value: !Ref TigeraSecureNodeSecurityGroup
     Export:
       Name: !Join [ ":", [ !Sub "${AWS::StackName}", TigeraSecureNodeSecurityGroup ] ]
+
+  OpenshiftMasterSecurityGroup:
+    Description: "Security group for all ocp master nodes in the cluster"
+    Value: !Ref OpenshiftMasterSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", OpenshiftMasterSecurityGroup ] ]
+
+  OpenshiftSSHSecurityGroup:
+    Description: "Security group for internal SSH access from master nodes"
+    Value: !Ref OpenshiftSSHSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", OpenshiftSSHSecurityGroup ] ]
+
+  OpenshiftInternalSecurityGroup:
+    Description: "Security group for all ocp nodes in the cluster"
+    Value: !Ref OpenshiftInternalSecurityGroup
+    Export:
+      Name: !Join [ ":", [ !Sub "${AWS::StackName}", OpenshiftInternalSecurityGroup ] ]

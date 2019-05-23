@@ -74,16 +74,16 @@ Resources:
           Type: forward
           TargetGroupArn: !Ref MasterNodesTargetGroup
       LoadBalancerArn: !Ref MasterNodesNetworkLoadBalancer
-      Port: 6443
+      Port: 8443
       Protocol: TCP
 
   MasterNodesTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Sub "${AWS::StackName}-masterNodes-tg"
-      Port: 6443
+      Port: 8443
       Protocol: TCP
-      HealthCheckPort: 6443
+      HealthCheckPort: 8443
       HealthCheckProtocol: TCP
       HealthCheckIntervalSeconds: 10
       HealthyThresholdCount: 3
@@ -98,7 +98,7 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: !Sub "${AWS::StackName}-asg"
-      DesiredCapacity: 3
+      DesiredCapacity: 1
       LaunchConfigurationName: !Ref MasterNodeLaunchConfig
       MinSize: 1
       MaxSize: 1
@@ -120,7 +120,7 @@ Resources:
         PropagateAtLaunch: 'true'
     UpdatePolicy:
       AutoScalingRollingUpdate:
-        MinInstancesInService: '1'
+        MinInstancesInService: '0'
         MaxBatchSize: '1'
 
   MasterNodeLaunchConfig:
@@ -133,8 +133,9 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SecurityGroups:
-        - Fn::ImportValue: !Sub "${EnvironmentName}:MasterNodeSecurityGroup"
-        - Fn::ImportValue: !Sub "${EnvironmentName}:TigeraSecureNodeSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftMasterSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftInternalSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftSSHSecurityGroup"
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -179,9 +180,8 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SecurityGroups:
-        - Fn::ImportValue: !Sub "${EnvironmentName}:WorkerNodeSecurityGroup"
-        - Fn::ImportValue: !Sub "${EnvironmentName}:TigeraSecureNodeSecurityGroup"
-        - Fn::ImportValue: !Sub "${EnvironmentName}:CloudProviderAWSSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftInternalSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftSSHSecurityGroup"
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:

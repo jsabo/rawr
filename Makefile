@@ -106,7 +106,7 @@ deploy_ocp: ## Deploy the ocp stack.
     --stack-name $(NAME) \
     --parameter-overrides \
       EnvironmentName=$(ENVNAME) \
-      KeyName=$(KEYNAME) \
+      KeyName=$(OCPKEYNAME) \
       MasterImageId=$(OCPMASTERIMAGEID) \
       WorkerImageId=$(OCPWORKERIMAGEID) \
       InstanceType=$(OCPINSTANCETYPE) \
