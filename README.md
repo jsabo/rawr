@@ -94,9 +94,6 @@ Help
 
 Launch the supporting AWS network (VPC) and security resources (IAM, SGs).
 
-[![Launch Stack](images/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https://s3.amazonaws.com/tigera-solutions/rawr/stacks/base/cloudformation.yaml)
-
-
 ```bash
 make deploy_base NAME=sabo-demo
 ```
@@ -104,8 +101,6 @@ make deploy_base NAME=sabo-demo
 ## Deploying k8s stack
 
 Launch the compute infrastructure for Kubernetes master and worker nodes.
-
-[![Launch Stack](images/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https://s3.amazonaws.com/tigera-solutions/rawr/stacks/k8s/cloudformation.yaml)
 
 ```bash
 make deploy_k8s NAME=sabo-demo-k8s
@@ -146,8 +141,6 @@ ansible kube-master -i inventory/kubespray-aws-inventory.py \
 ## Deploying EKS stack
 
 Launch an AWS managed Kubernetes control plane and fully configured worker nodes.
-
-[![Launch Stack](images/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https://s3.amazonaws.com/tigera-solutions/rawr/stacks/eks/cloudformation.yaml)
 
 ```bash
 make deploy_eks NAME=sabo-demo-eks
