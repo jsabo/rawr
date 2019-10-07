@@ -31,7 +31,7 @@ Resources:
     Type: AWS::EKS::Cluster
     Properties:
       Name: !Sub "${AWS::StackName}"
-      Version: "1.12"
+      Version: "1.13"
       RoleArn:
         Fn::ImportValue: !Sub "${EnvironmentName}:EKSServiceRoleArn"
       ResourcesVpcConfig:

@@ -66,21 +66,49 @@ Resources:
           Value: !Sub "${AWS::StackName}-masterNodes-lb"
       Type: "network"
 
-  MasterNodesNetworkLoadBalancerHTTPSListener:
+  MasterNodesNetworkLoadBalancer443Listener:
     Type : AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         -
           Type: forward
-          TargetGroupArn: !Ref MasterNodesTargetGroup
+          TargetGroupArn: !Ref MasterNodes443TargetGroup
+      LoadBalancerArn: !Ref MasterNodesNetworkLoadBalancer
+      Port: 443
+      Protocol: TCP
+
+  MasterNodesNetworkLoadBalancer8443Listener:
+    Type : AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        -
+          Type: forward
+          TargetGroupArn: !Ref MasterNodes8443TargetGroup
       LoadBalancerArn: !Ref MasterNodesNetworkLoadBalancer
       Port: 8443
       Protocol: TCP
 
-  MasterNodesTargetGroup:
+  MasterNodes443TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: !Sub "${AWS::StackName}-masterNodes-tg"
+      Name: !Sub "${AWS::StackName}-master443Nodes-tg"
+      Port: 443
+      Protocol: TCP
+      HealthCheckPort: 443
+      HealthCheckProtocol: TCP
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: !Sub "${EnvironmentName}:VPC"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AWS::StackName}-master443Nodes-tg"
+
+  MasterNodes8443TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-master8443Nodes-tg"
       Port: 8443
       Protocol: TCP
       HealthCheckPort: 8443
@@ -92,7 +120,7 @@ Resources:
         Fn::ImportValue: !Sub "${EnvironmentName}:VPC"
       Tags:
         - Key: "Name"
-          Value: !Sub "${AWS::StackName}-masterNodes-tg"
+          Value: !Sub "${AWS::StackName}-master8443Nodes-tg"
 
   MasterNodeGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -107,7 +135,8 @@ Resources:
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet1"
         - Fn::ImportValue: !Sub "${EnvironmentName}:PublicSubnet2"
       TargetGroupARNs:
-        - !Ref MasterNodesTargetGroup
+        - !Ref MasterNodes443TargetGroup
+        - !Ref MasterNodes8443TargetGroup
       Tags:
       - Key: Name
         Value: !Sub "${AWS::StackName}-master-node"
@@ -133,9 +162,8 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
       SecurityGroups:
-        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftMasterSecurityGroup"
         - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftInternalSecurityGroup"
-        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftSSHSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftAdminSecurityGroup"
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -181,7 +209,7 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroups:
         - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftInternalSecurityGroup"
-        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftSSHSecurityGroup"
+        - Fn::ImportValue: !Sub "${EnvironmentName}:OpenshiftAdminSecurityGroup"
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
